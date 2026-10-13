@@ -1,0 +1,1 @@
+# KiteShield Wallet — Core Package

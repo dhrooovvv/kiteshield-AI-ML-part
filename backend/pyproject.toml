@@ -1,0 +1,105 @@
+[project]
+name = "kiteshield-backend"
+version = "0.1.0"
+description = "KiteShield Wallet — Constrained AI Agent Authorization for Blockchain Transactions"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "KiteShield Team"},
+]
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0,<1.0",
+    "uvicorn[standard]>=0.32.0,<1.0",
+    # Data validation
+    "pydantic>=2.10.0,<3.0",
+    "pydantic-settings>=2.6.0,<3.0",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36,<3.0",
+    "aiosqlite>=0.20.0,<1.0",
+    "alembic>=1.14.0,<2.0",
+    # Blockchain
+    "web3>=7.6.0,<8.0",
+    # JWT for capability tokens
+    "PyJWT>=2.10.0,<3.0",
+    # OpenAI for agent service
+    "openai>=1.58.0,<2.0",
+    # HTTP client
+    "httpx>=0.28.0,<1.0",
+    # Utilities
+    "python-dotenv>=1.0.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.3.0,<9.0",
+    "pytest-asyncio>=0.24.0,<1.0",
+    "pytest-cov>=6.0.0,<7.0",
+    "httpx>=0.28.0,<1.0",
+    # Linting & formatting
+    "ruff>=0.8.0,<1.0",
+    # Type checking
+    "mypy>=1.13.0,<2.0",
+    # SQLAlchemy stubs
+    "sqlalchemy-stubs>=0.4,<1.0",
+]
+
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+# ---- Ruff Configuration ----
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "S",    # flake8-bandit (security)
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "N",    # pep8-naming
+]
+ignore = [
+    "S101",  # Allow assert in tests
+    "B008",  # Allow Depends() in function args (FastAPI pattern)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S105", "S106"]
+
+# ---- Pytest Configuration ----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+# ---- Mypy Configuration ----
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = []
+
+[[tool.mypy.overrides]]
+module = "web3.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "eth_account.*"
+ignore_missing_imports = true

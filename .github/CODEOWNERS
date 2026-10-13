@@ -1,0 +1,18 @@
+# ==========================================
+# KiteShield Wallet — Code Owners & Security Gates
+# ==========================================
+# Protect security-critical backend modules from unreviewed changes.
+# Any modifications to these paths require review from the security team.
+
+# Security-Critical Core Modules
+/backend/app/services/signer.py         @kiteshield/security-leads
+/backend/app/services/capability.py     @kiteshield/security-leads
+/backend/app/services/policy_engine.py  @kiteshield/security-leads
+/backend/app/services/audit.py          @kiteshield/security-leads
+/backend/app/core/security.py           @kiteshield/security-leads
+
+# Blockchain Adapter
+/backend/app/services/blockchain.py     @kiteshield/blockchain-leads
+
+# CI and Security Workflows
+/.github/workflows/                     @kiteshield/security-leads

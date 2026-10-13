@@ -1,0 +1,39 @@
+# ==========================================
+# KiteShield Backend .gitignore
+# ==========================================
+
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# SQLite Databases & WAL files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Python Virtual Environments & Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Packaging & Distribution
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
