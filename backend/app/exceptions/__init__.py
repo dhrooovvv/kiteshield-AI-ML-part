@@ -176,6 +176,27 @@ class SigningRejectedError(SignerError):
     status_code = 403
 
 
+class EmergencyStopError(KiteShieldError):
+    """Emergency-stop state prevented or prevented determining execution."""
+
+    error_code = "EMERGENCY_STOP"
+    status_code = 503
+
+
+class EmergencyStopActiveError(EmergencyStopError):
+    """Execution is halted by the authoritative emergency stop."""
+
+    error_code = "EMERGENCY_STOP_ACTIVE"
+    status_code = 403
+
+
+class EmergencyStopUnavailableError(EmergencyStopError):
+    """Authoritative emergency-stop state could not be read."""
+
+    error_code = "EMERGENCY_STOP_UNAVAILABLE"
+    status_code = 503
+
+
 # ---- Blockchain Errors ----
 
 

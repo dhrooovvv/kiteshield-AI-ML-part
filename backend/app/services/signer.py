@@ -47,8 +47,10 @@ from app.exceptions import (
 from app.models import CapabilityToken, Policy
 from app.schemas import NormalizedAction
 from app.services.capability import CapabilityService
+from app.services.emergency_stop import EmergencyStopService
 
 logger = get_logger("signer")
+emergency_stop_service = EmergencyStopService()
 
 
 class IsolatedSigner:
@@ -102,6 +104,7 @@ class IsolatedSigner:
             TokenMismatchError: Transaction params don't match token
             SigningRejectedError: Any other verification failure
         """
+        await emergency_stop_service.require_running(session)
         # ===== STEP 1: Verify JWT signature and basic claims =====
         # This re-verifies independently — does not trust API assertion
         claims = self._capability_service.verify_token(token)

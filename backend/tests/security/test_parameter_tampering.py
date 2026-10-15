@@ -48,7 +48,8 @@ class TestRecipientSubstitution:
     ):
         """Token for address A, transaction to address B → REJECTED."""
         # Issue token for original recipient
-        token, claims = cap_service.issue_token(
+        token, claims = await cap_service.issue_token(
+            session=test_session,
             action=original_action,
             policy_version=1,
         )
@@ -78,7 +79,8 @@ class TestAmountManipulation:
         self, signer, cap_service, original_action, test_session
     ):
         """Token for 0.1 ETH, transaction for 10 ETH → REJECTED."""
-        token, claims = cap_service.issue_token(
+        token, claims = await cap_service.issue_token(
+            session=test_session,
             action=original_action,
             policy_version=1,
         )
@@ -105,7 +107,8 @@ class TestAmountManipulation:
         """Token for 0.1 ETH, transaction for 0.01 ETH → REJECTED.
         Even smaller amounts are rejected — the token authorizes EXACTLY one amount.
         """
-        token, _ = cap_service.issue_token(
+        token, _ = await cap_service.issue_token(
+            session=test_session,
             action=original_action,
             policy_version=1,
         )
@@ -134,7 +137,8 @@ class TestChainIdSubstitution:
         self, signer, cap_service, original_action, test_session
     ):
         """Token for Sepolia, action claims different chain → REJECTED."""
-        token, _ = cap_service.issue_token(
+        token, _ = await cap_service.issue_token(
+            session=test_session,
             action=original_action,
             policy_version=1,
         )
@@ -163,7 +167,8 @@ class TestProposalIdMismatch:
         self, signer, cap_service, original_action, test_session
     ):
         """Token for proposal A, signing request for proposal B → REJECTED."""
-        token, _ = cap_service.issue_token(
+        token, _ = await cap_service.issue_token(
+            session=test_session,
             action=original_action,
             policy_version=1,
         )

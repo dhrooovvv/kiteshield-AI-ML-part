@@ -160,6 +160,22 @@ class SignProposalRequest(BaseModel):
     proposal_id: str = Field(..., description="UUID of the proposal to sign")
 
 
+class EmergencyStopRequest(BaseModel):
+    """Administrative request to change the execution stop state."""
+
+    active: bool
+    reason: str = Field(..., min_length=1, max_length=512)
+
+
+class EmergencyStopResponse(BaseModel):
+    """Public emergency-stop state; no credential material is included."""
+
+    active: bool
+    reason: str
+    version: int
+    updated_at: str
+
+
 # ---- Response Schemas ----
 
 

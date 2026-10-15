@@ -177,4 +177,4 @@ async def test_escalate_and_rejection_flow(auth_client, active_policy):
 
     # 4. Signing must be rejected
     sign_res = await auth_client.post(f"/api/v1/proposals/{prop_id}/sign")
-    assert sign_res.status_code in (403, 400)
+    assert sign_res.status_code == 403

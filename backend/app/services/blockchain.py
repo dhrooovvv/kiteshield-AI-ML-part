@@ -12,13 +12,16 @@ Security:
 
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from web3 import Web3
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.exceptions import RPCError, TransactionSubmissionError
+from app.services.emergency_stop import EmergencyStopService
 
 logger = get_logger("blockchain")
+emergency_stop_service = EmergencyStopService()
 
 
 class BlockchainService:
@@ -36,7 +39,9 @@ class BlockchainService:
             self._w3 = Web3(Web3.HTTPProvider(self._rpc_url, request_kwargs={"timeout": 10}))
         return self._w3
 
-    async def submit_raw_transaction(self, raw_tx_hex: str) -> dict[str, Any]:
+    async def submit_raw_transaction(
+        self, raw_tx_hex: str, *, session: AsyncSession
+    ) -> dict[str, Any]:
         """Broadcast a pre-signed transaction to the Sepolia network.
 
         Args:
@@ -49,6 +54,7 @@ class BlockchainService:
             TransactionSubmissionError: If submission fails or node rejects the tx.
             RPCError: If the RPC endpoint is unreachable or times out.
         """
+        await emergency_stop_service.require_running(session)
         cleaned_hex = raw_tx_hex.removeprefix("0x")
         logger.info("Broadcasting raw transaction (length=%d hex chars)", len(cleaned_hex))
 

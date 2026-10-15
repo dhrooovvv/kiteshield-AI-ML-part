@@ -19,6 +19,9 @@ from app.core.logging import correlation_id_var
 
 # API key header scheme
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+emergency_stop_admin_api_key_header = APIKeyHeader(
+    name="X-Emergency-Stop-Admin-Key", auto_error=False
+)
 
 
 async def verify_api_key(
@@ -42,6 +45,32 @@ async def verify_api_key(
         )
 
     return api_key
+
+
+async def verify_emergency_stop_admin(
+    api_key: Annotated[str | None, Security(emergency_stop_admin_api_key_header)],
+) -> str:
+    """Verify the dedicated emergency-stop administration credential."""
+    if api_key is None:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "code": "MISSING_EMERGENCY_STOP_ADMIN_KEY",
+                "message": "Emergency-stop administrator credential is required",
+            },
+        )
+
+    settings = get_settings()
+    if not secrets.compare_digest(api_key, settings.emergency_stop_admin_api_key):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "INVALID_EMERGENCY_STOP_ADMIN_KEY",
+                "message": "Invalid emergency-stop administrator credential",
+            },
+        )
+
+    return "emergency_stop_admin"
 
 
 def generate_correlation_id() -> str:

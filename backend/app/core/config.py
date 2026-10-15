@@ -54,6 +54,12 @@ class Settings(BaseSettings):
         min_length=16,
         description="API key for backend authentication",
     )
+    emergency_stop_admin_api_key: str = Field(
+        ...,
+        repr=False,
+        min_length=16,
+        description="Dedicated credential for emergency-stop administration",
+    )
 
     # ---- Blockchain ----
     chain_id: int = Field(default=11155111, description="Target chain ID (Sepolia=11155111)")
@@ -138,6 +144,16 @@ class Settings(BaseSettings):
             raise ValueError(
                 "API_KEY must be set. "
                 'Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        return v
+
+    @field_validator("emergency_stop_admin_api_key")
+    @classmethod
+    def validate_emergency_stop_admin_api_key(cls, v: str) -> str:
+        """Reject placeholder emergency-stop credentials."""
+        if "CHANGE_ME" in v:
+            raise ValueError(
+                "EMERGENCY_STOP_ADMIN_API_KEY must be set to a real secret"
             )
         return v
 

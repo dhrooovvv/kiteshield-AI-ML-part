@@ -17,6 +17,7 @@ os.environ.update(
         "APP_DEBUG": "false",
         "CAPABILITY_TOKEN_SECRET": "a" * 64,  # Test-only secret (64 hex chars)
         "API_KEY": "test-api-key-for-unit-tests-only",
+        "EMERGENCY_STOP_ADMIN_API_KEY": "test-emergency-stop-admin-key",
         "CHAIN_ID": "11155111",
         "SEPOLIA_RPC_URL": "https://mock-rpc.test/v1",
         "SIGNER_PRIVATE_KEY": "b" * 64,  # Test-only key (never used on real network)
@@ -30,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.db import get_db_session
 from app.main import create_app
-from app.models import Base
+from app.models import Base, ExecutionControl
 
 # ---- Database Fixtures ----
 
@@ -45,6 +46,14 @@ async def test_engine():
     )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        session.add(
+            ExecutionControl(
+                id="global", active=False, reason="", changed_by="system", version=0
+            )
+        )
+        await session.commit()
 
     yield engine
 

@@ -39,9 +39,11 @@ def test_action():
 class TestTokenIssuance:
     """Tests for capability token issuance."""
 
-    def test_issue_valid_token(self, cap_service, test_action):
+    @pytest.mark.asyncio
+    async def test_issue_valid_token(self, cap_service, test_action, test_session):
         """Should issue a valid JWT with all required claims."""
-        token, claims = cap_service.issue_token(
+        token, claims = await cap_service.issue_token(
+            session=test_session,
             action=test_action,
             policy_version=1,
         )
@@ -61,19 +63,25 @@ class TestTokenIssuance:
         assert "iat" in claims
         assert "exp" in claims
 
-    def test_issue_requires_approval_id_for_escalated(self, cap_service, test_action):
+    @pytest.mark.asyncio
+    async def test_issue_requires_approval_id_for_escalated(
+        self, cap_service, test_action, test_session
+    ):
         """Escalated actions must have approval_id."""
         with pytest.raises(ApprovalRequiredError):
-            cap_service.issue_token(
+            await cap_service.issue_token(
+                session=test_session,
                 action=test_action,
                 policy_version=1,
                 requires_approval=True,
                 approval_id=None,
             )
 
-    def test_issue_with_approval(self, cap_service, test_action):
+    @pytest.mark.asyncio
+    async def test_issue_with_approval(self, cap_service, test_action, test_session):
         """Escalated action with valid approval → token issued."""
-        token, claims = cap_service.issue_token(
+        token, claims = await cap_service.issue_token(
+            session=test_session,
             action=test_action,
             policy_version=1,
             requires_approval=True,
@@ -81,7 +89,8 @@ class TestTokenIssuance:
         )
         assert claims["approval_id"] == "approval-789"
 
-    def test_different_actions_produce_different_digests(self, cap_service):
+    @pytest.mark.asyncio
+    async def test_different_actions_produce_different_digests(self, cap_service, test_session):
         """Different recipients should produce different tx_digests."""
         action1 = NormalizedAction(
             proposal_id="p1",
@@ -95,23 +104,26 @@ class TestTokenIssuance:
             recipient="0x0000000000000000000000000000000000000001",
             amount_wei=100,
         )
-        _, claims1 = cap_service.issue_token(action1, policy_version=1)
-        _, claims2 = cap_service.issue_token(action2, policy_version=1)
+        _, claims1 = await cap_service.issue_token(test_session, action1, policy_version=1)
+        _, claims2 = await cap_service.issue_token(test_session, action2, policy_version=1)
         assert claims1["tx_digest"] != claims2["tx_digest"]
 
-    def test_unique_jti_per_issuance(self, cap_service, test_action):
+    @pytest.mark.asyncio
+    async def test_unique_jti_per_issuance(self, cap_service, test_action, test_session):
         """Each token should have a unique JTI."""
-        _, c1 = cap_service.issue_token(test_action, policy_version=1)
-        _, c2 = cap_service.issue_token(test_action, policy_version=1)
+        _, c1 = await cap_service.issue_token(test_session, test_action, policy_version=1)
+        _, c2 = await cap_service.issue_token(test_session, test_action, policy_version=1)
         assert c1["jti"] != c2["jti"]
 
 
 class TestTokenVerification:
     """Tests for capability token verification."""
 
-    def test_verify_valid_token(self, cap_service, test_action):
+    @pytest.mark.asyncio
+    async def test_verify_valid_token(self, cap_service, test_action, test_session):
         """Valid token should verify successfully."""
-        token, expected_claims = cap_service.issue_token(
+        token, expected_claims = await cap_service.issue_token(
+            session=test_session,
             action=test_action,
             policy_version=1,
         )
