@@ -1,0 +1,46 @@
+{
+  "configuration": "core",
+  "dataset_id": "neuralchemy/Prompt-injection-dataset",
+  "dataset_revision": "7d70432dfcf47a821612cbf9d34e9d9e3ad20e75",
+  "exclusion_policy": "Fail rather than silently exclude a test row; no test rows were excluded.",
+  "fetched_counts": {
+    "test": 942,
+    "validation": 941
+  },
+  "kiteShield_positive_class": [
+    "SUSPICIOUS",
+    "MALICIOUS"
+  ],
+  "label_mapping": {
+    "0": "BENIGN",
+    "1": "MALICIOUS"
+  },
+  "license": "apache-2.0",
+  "metadata_preserved": [
+    "category",
+    "source",
+    "severity",
+    "group_id",
+    "augmented",
+    "tags"
+  ],
+  "prepared_test_count": 942,
+  "reported_counts": {
+    "test": 942,
+    "validation": 941
+  },
+  "requested_splits": {
+    "test": "test",
+    "validation": "validation"
+  },
+  "source_url": "https://huggingface.co/datasets/neuralchemy/Prompt-injection-dataset",
+  "test_duplicate_text_count": 0,
+  "test_exclusions": [],
+  "test_prepared_sha256": "332c8c1380d05fdd8f8fc3d807e0f7373d98d3dbcfb0a17c267c79a419bcafbe",
+  "thresholds": {
+    "bastion": 0.059,
+    "horizon": 0.9352320432662964,
+    "source": "existing v2 development-selected values; no public-test tuning"
+  },
+  "validation_exclusions": []
+}

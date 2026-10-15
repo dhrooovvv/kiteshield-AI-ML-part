@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KiteShield AI/ML Repository Audit</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --paper: #fff;
+      --ink: #172033;
+      --muted: #596579;
+      --line: #dce2ec;
+      --accent: #2458c6;
+      --accent-soft: #eef4ff;
+      --warn: #9a5b00;
+      --warn-soft: #fff6e6;
+      --code: #f0f3f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.65 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 850px);
+      gap: 48px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    nav {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      font-size: 14px;
+    }
+    nav strong { display: block; margin-bottom: 12px; }
+    nav a { display: block; padding: 4px 0; color: var(--muted); text-decoration: none; }
+    nav a:hover { color: var(--accent); }
+    main { min-width: 0; background: var(--paper); padding: 42px 48px 64px; box-shadow: 0 8px 30px rgba(28, 44, 74, .06); }
+    h1, h2, h3 { line-height: 1.25; }
+    h1 { margin: 0 0 8px; font-size: clamp(30px, 5vw, 46px); letter-spacing: -.02em; }
+    h2 { margin: 42px 0 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 27px; }
+    h3 { margin: 28px 0 8px; font-size: 19px; }
+    p { max-width: 78ch; }
+    .subtitle, .muted { color: var(--muted); }
+    .callout { margin: 24px 0; padding: 16px 18px; border-left: 4px solid var(--accent); background: var(--accent-soft); }
+    .warning { border-left-color: var(--warn); background: var(--warn-soft); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    code { padding: 1px 4px; background: var(--code); border-radius: 3px; font-size: .92em; }
+    pre { overflow-x: auto; padding: 16px; background: var(--code); border: 1px solid var(--line); border-radius: 6px; font-size: 13px; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0 22px; font-size: 14px; }
+    th, td { padding: 10px 12px; text-align: left; vertical-align: top; border: 1px solid var(--line); }
+    th { background: var(--code); }
+    li { margin: 5px 0; }
+    a { color: var(--accent); }
+    .status { display: inline-block; margin: 16px 0 8px; padding: 5px 10px; border-radius: 999px; color: #174d2b; background: #e8f7ed; font-size: 13px; font-weight: 700; }
+    .small { font-size: 13px; }
+    @media (max-width: 850px) {
+      .layout { display: block; padding: 0; }
+      nav { position: static; padding: 24px; background: var(--paper); border-bottom: 1px solid var(--line); }
+      nav a { display: inline-block; margin-right: 14px; }
+      main { padding: 28px 22px 48px; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav aria-label="Contents">
+      <strong>Contents</strong>
+      <a href="#status">Audit status</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#ai">Existing AI/ML</a>
+      <a href="#defenses">Injection defenses</a>
+      <a href="#security">Security flow</a>
+      <a href="#options">Detector options</a>
+      <a href="#testing">Testing and data</a>
+      <a href="#team">Team integration</a>
+      <a href="#plan">Implementation plan</a>
+      <a href="#first-step">First step</a>
+    </nav>
+
+    <main>
+      <header>
+        <h1>KiteShield AI/ML Repository Audit</h1>
+        <p class="subtitle">Read-only Stage 1 audit · Repository commit <code>36f4deb</code></p>
+        <span class="status">Audit complete — no files modified during the audit</span>
+      </header>
+
+      <section id="status">
+        <h2>Audit status</h2>
+        <p>The audit was performed against the local KiteShield repository:</p>
+        <pre>/Users/dhruv/Desktop/backend projects/ai wallet agent
+origin: https://github.com/atulharshvardhan2006/KiteShield.git
+branch: main
+HEAD: 36f4deb</pre>
+        <p>The working tree already contained untracked AI/ML files from earlier work. They were preserved and treated as unverified working-tree changes, not as functionality present in the repository’s current commit.</p>
+        <div class="callout warning">
+          <strong>Important:</strong> the repository’s current commit does not contain a tracked AI/ML module, prompt-injection detector, transaction-risk scorer, model-serving layer, or labelled ML dataset.
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>A. Current architecture and relevant paths</h2>
+        <p>KiteShield is a Python FastAPI modular monolith. The main technologies are FastAPI, Pydantic v2, async SQLAlchemy, SQLite, OpenAI, PyJWT, web3.py, and <code>eth_account</code>.</p>
+        <p>Application entry point:</p>
+        <ul>
+          <li><a href="../backend/app/main.py">backend/app/main.py</a> — <code>create_app()</code> and route registration.</li>
+        </ul>
+        <pre>backend/app/
+├── api/routes/
+│   ├── proposals.py
+│   ├── policies.py
+│   ├── approvals.py
+│   ├── transactions.py
+│   └── audit.py
+├── schemas/__init__.py
+├── models/__init__.py
+├── services/
+│   ├── agent.py
+│   ├── policy_engine.py
+│   ├── capability.py
+│   ├── signer.py
+│   ├── audit.py
+│   └── blockchain.py
+├── core/
+│   ├── config.py
+│   ├── logging.py
+│   └── security.py
+└── tests/
+    ├── unit/
+    ├── integration/
+    └── security/</pre>
+        <p>Project configuration is in <a href="../backend/pyproject.toml">backend/pyproject.toml</a>. CI runs Ruff, pytest with coverage, frontend checks, and a tracked-secret audit in <a href="../.github/workflows/ci.yml">.github/workflows/ci.yml</a>.</p>
+      </section>
+
+      <section id="ai">
+        <h2>B. Existing AI/ML and security functionality</h2>
+        <h3>Existing LLM agent</h3>
+        <p><a href="../backend/app/services/agent.py">backend/app/services/agent.py</a> defines <code>AgentService</code>.</p>
+        <ul>
+          <li>Uses OpenAI structured output when an API key is configured.</li>
+          <li>Hardcodes <code>model="gpt-4o"</code> in <code>_call_openai_structured()</code>.</li>
+          <li>Defines <code>OPENAI_MODEL</code> in configuration, but the agent does not use that setting.</li>
+          <li>Extracts recipient, ETH amount, and explanation.</li>
+          <li>Validates the result through <code>AgentProposalRequest</code>.</li>
+          <li>Falls back to regex parsing if OpenAI fails or is unavailable.</li>
+        </ul>
+        <p>The fallback parser extracts an address and amount, then falls back to a generic number and ultimately a default <code>0.01 ETH</code> amount. This is bounded later by policy, but ambiguous extraction is not itself fail-closed.</p>
+
+        <h3>Existing validation</h3>
+        <p><a href="../backend/app/schemas/__init__.py">backend/app/schemas/__init__.py</a> defines:</p>
+        <ul>
+          <li><code>AgentProposalRequest</code> — prompt, recipient, amount, chain, and asset validation.</li>
+          <li><code>NormalizedAction</code> — canonical action representation for policy, token, and signer code.</li>
+          <li><code>PolicyDecisionType</code> — <code>ALLOW</code>, <code>ESCALATE</code>, and <code>BLOCK</code>.</li>
+        </ul>
+
+        <h3>Existing policy engine</h3>
+        <p><a href="../backend/app/services/policy_engine.py">backend/app/services/policy_engine.py</a> defines a pure deterministic <code>PolicyEngine.evaluate()</code> function. It checks asset type, chain, blocked recipients, allowlists, per-transaction limits, daily limits, and escalation thresholds.</p>
+        <p>Its decision priority is:</p>
+        <pre>BLOCK &gt; ESCALATE &gt; ALLOW</pre>
+        <p>There is no transaction risk score, recipient-novelty feature, ML prediction, or model-based security decision.</p>
+
+        <h3>Existing capability and signer controls</h3>
+        <ul>
+          <li><a href="../backend/app/services/capability.py">capability.py</a> issues short-lived HS256 JWT capability tokens.</li>
+          <li><a href="../backend/app/services/signer.py">signer.py</a> independently verifies token claims and transaction parameters.</li>
+          <li>The signer checks chain ID, recipient, amount, digest, proposal ID, active policy version, expiry, and replay state.</li>
+          <li>The private key is loaded only within the signer implementation.</li>
+        </ul>
+
+        <h3>Existing audit and logging</h3>
+        <ul>
+          <li><a href="../backend/app/services/audit.py">audit.py</a> sanitizes details and maintains a hash chain.</li>
+          <li><a href="../backend/app/core/logging.py">logging.py</a> redacts configured sensitive field names.</li>
+          <li>The agent and proposal routes still log truncated prompt text. This is not a private-key leak, but it can expose sensitive invoice, email, or external-message content.</li>
+        </ul>
+      </section>
+
+      <section id="defenses">
+        <h2>C. Prompt-injection defenses and verified gaps</h2>
+        <h3>What exists</h3>
+        <p>The repository defends primarily against the consequences of malicious model output:</p>
+        <ul>
+          <li>Pydantic validation;</li>
+          <li>deterministic policy evaluation;</li>
+          <li>recipient allowlists and blocklists;</li>
+          <li>amount and daily spending limits;</li>
+          <li>human approval for escalated actions;</li>
+          <li>action-bound capability tokens;</li>
+          <li>independent signer verification;</li>
+          <li>replay protection.</li>
+        </ul>
+        <h3>What does not exist</h3>
+        <p>There is no prompt-injection detector. The existing <a href="../backend/tests/security/test_prompt_injection.py">test_prompt_injection.py</a> verifies that malicious prompts cannot bypass policy; it does not classify or screen text.</p>
+        <p>Missing attack coverage includes:</p>
+        <ul>
+          <li>indirect injection in invoices or webpages;</li>
+          <li>hidden instructions embedded in otherwise benign text;</li>
+          <li>Unicode, whitespace, and encoding obfuscation;</li>
+          <li>multilingual attacks;</li>
+          <li>fake <code>system:</code> or <code>developer:</code> messages;</li>
+          <li>secret-exfiltration requests;</li>
+          <li>address-substitution instructions;</li>
+          <li>benign text containing security terminology;</li>
+          <li>detector timeout and malformed-result behavior;</li>
+          <li>disagreement between a detector and the policy engine.</li>
+        </ul>
+      </section>
+
+      <section id="security">
+        <h2>D. Security flow and authority boundaries</h2>
+        <pre>POST /api/v1/proposals/agent
+  ↓
+AgentPromptRequest
+  ↓
+AgentService: OpenAI GPT-4o or regex fallback
+  ↓
+AgentProposalRequest validation
+  ↓
+Proposal stored as PROPOSED
+  ↓
+POST /api/v1/proposals/{id}/evaluate
+  ↓
+NormalizedAction
+  ↓
+PolicyEngine.evaluate()
+  ↓
+ALLOW / ESCALATE / BLOCK
+  ↓
+Human approval if required
+  ↓
+CapabilityService.issue_token()
+  ↓
+IsolatedSigner.sign_transaction()
+  ↓
+BlockchainService.submit_raw_transaction()</pre>
+        <p>The deterministic policy engine is authoritative for policy decisions. The signer is authoritative for final signing authorization. The LLM and any future AI/ML detector must remain untrusted.</p>
+        <div class="callout">
+          <strong>Required invariant:</strong> an AI/ML score may increase scrutiny, escalate, or block an action. It must never convert a policy denial into approval, issue a capability token, or authorize signing independently.
+        </div>
+        <p>Any future detector failure, timeout, invalid output, or ambiguous result should fail closed into escalation or blocking, depending on the agreed contract.</p>
+      </section>
+
+      <section id="options">
+        <h2>E. Prompt-injection detector options</h2>
+        <table>
+          <thead><tr><th>Option</th><th>Cost</th><th>Apple Silicon</th><th>Latency</th><th>Limitations</th><th>Assessment</th></tr></thead>
+          <tbody>
+            <tr><td>Deterministic rules</td><td>None</td><td>Excellent</td><td>Very low</td><td>Brittle; weak against paraphrases and obfuscation</td><td>Required baseline</td></tr>
+            <tr><td>DistilBERT classifier</td><td>Local model and dependencies</td><td>Feasible</td><td>Must benchmark</td><td>Requires labelled data; shorter context</td><td>Possible lightweight model</td></tr>
+            <tr><td>ModernBERT classifier</td><td>Local model and dependencies</td><td>Feasible but heavier</td><td>Must benchmark</td><td>Base checkpoint is not an injection classifier; requires a classification head and labelled data</td><td>Evaluate later</td></tr>
+            <tr><td>Local <code>jevos</code></td><td>Free/open source</td><td>CPU-oriented</td><td>Upstream reports tens of milliseconds, hardware-dependent</td><td>Yes/no judgment rather than native multiclass classification; requires threshold calibration</td><td>Optional supplementary signal</td></tr>
+            <tr><td>Hosted Jev API</td><td>Per-use/vendor cost</td><td>No local model</td><td>Network-dependent</td><td>Privacy, outages, vendor dependence; secrets must not be sent</td><td>Optional only</td></tr>
+          </tbody>
+        </table>
+        <p>ModernBERT is an encoder architecture intended for classification and other language tasks, with documented long-context support up to 8192 tokens. That does not establish prompt-injection accuracy for KiteShield. A labelled benchmark is required. References: <a href="https://arxiv.org/abs/2412.13663">ModernBERT paper</a> and <a href="https://huggingface.co/docs/transformers/main/model_doc/modernbert">Hugging Face documentation</a>.</p>
+        <p><a href="https://github.com/feder-cr/jev">jevos</a> is an open-source local alternative designed for CPU inference and yes/no decisions. Its upstream latency and accuracy numbers are not KiteShield measurements. The hosted <a href="https://jev.pro/api/">Jev API</a> is a separate cloud service with network, privacy, and cost implications.</p>
+        <p>A local Jev-style model should return only an advisory probability. It must not become the authorization authority.</p>
+      </section>
+
+      <section id="testing">
+        <h2>F. Testing and data findings</h2>
+        <p>The repository uses pytest, pytest-asyncio, pytest-cov, Ruff, and mypy. It does not currently depend on Hypothesis, Transformers, PyTorch, ONNX Runtime, OpenVINO, or model-serving libraries.</p>
+        <p>There is no labelled prompt-injection dataset or ML evaluation harness. Existing database entities include proposals, policy decisions, approvals, transactions, capability tokens, audit events, and spending records, but they do not contain ground-truth injection or fraud labels.</p>
+        <h3>Recommended evaluation data</h3>
+        <pre>BENIGN:
+- normal invoices and ordinary payment instructions
+- policy explanations
+- quoted text mentioning security terminology
+
+MALICIOUS:
+- direct instruction override
+- indirect invoice/webpage injection
+- secret exfiltration
+- address substitution
+- policy bypass
+- tool/action redirection
+
+ADVERSARIAL:
+- paraphrases
+- Unicode and whitespace obfuscation
+- multilingual variants
+- long benign prefixes
+- fake role markers
+- HTML/Markdown embedding
+- attacks split across fields</pre>
+        <h3>Required metrics</h3>
+        <ul>
+          <li>malicious-class precision, recall, and F1;</li>
+          <li>macro F1;</li>
+          <li>false-positive rate on benign operational text;</li>
+          <li>false-negative rate on adversarial examples;</li>
+          <li>p50 and p95 inference latency;</li>
+          <li>threshold and calibration analysis;</li>
+          <li>failure and timeout rates;</li>
+          <li>regression tests proving policy <code>BLOCK</code> remains terminal.</li>
+        </ul>
+        <p>No accuracy or latency claim should be made until this evaluation exists.</p>
+      </section>
+
+      <section id="team">
+        <h2>G. Team integration and merge strategy</h2>
+        <p>To minimize four-way merge conflicts, the initial AI/ML work should be additive and isolated:</p>
+        <pre>backend/app/ai_ml/
+├── __init__.py
+├── contracts.py
+├── injection_screen.py
+├── risk_baseline.py
+└── service.py
+
+backend/tests/unit/
+└── test_ai_ml_injection_screen.py
+
+backend/tests/security/
+└── test_ai_ml_integration.py</pre>
+        <p>Existing untracked files occupy part of this proposed area:</p>
+        <ul>
+          <li><code>backend/app/ai_ml/__init__.py</code></li>
+          <li><code>backend/app/ai_ml/schemas.py</code></li>
+          <li><code>backend/app/ai_ml/injection_screen.py</code></li>
+          <li><code>backend/tests/unit/test_injection_screen.py</code></li>
+        </ul>
+        <p>Shared integration files that require coordination are:</p>
+        <ul>
+          <li><code>backend/app/api/routes/proposals.py</code></li>
+          <li><code>backend/app/schemas/__init__.py</code></li>
+          <li><code>backend/app/models/__init__.py</code></li>
+          <li><code>backend/app/services/audit.py</code></li>
+          <li>frontend proposal types and display components</li>
+        </ul>
+        <h3>Decisions requiring teammate agreement</h3>
+        <ol>
+          <li>Should suspicious text block immediately or create an approval request?</li>
+          <li>Which sources must be screened before reaching the LLM?</li>
+          <li>Should detector results be persisted or only included in audit metadata?</li>
+          <li>Who owns the shared proposal-route integration?</li>
+          <li>What false-positive rate and p95 latency are acceptable?</li>
+          <li>Is a local sidecar such as <code>jevos</code> allowed as an optional development dependency?</li>
+          <li>Will labelled evaluation fixtures be maintained in this repository?</li>
+        </ol>
+      </section>
+
+      <section id="plan">
+        <h2>H. Phased implementation plan</h2>
+        <h3>Phase 1 — Contract and deterministic baseline</h3>
+        <ul>
+          <li>Agree on input source types: user, invoice, webpage, email, and tool output.</li>
+          <li>Agree on labels, score semantics, and failure behavior.</li>
+          <li>Implement a pure rule-based detector.</li>
+          <li>Add unit tests for benign, direct, indirect, obfuscated, and malformed inputs.</li>
+          <li>Do not touch policy, signer, database, or API routes yet.</li>
+        </ul>
+        <h3>Phase 2 — Boundary integration</h3>
+        <ul>
+          <li>Screen external text before the LLM receives it.</li>
+          <li>Preserve detector metadata as an advisory safety signal.</li>
+          <li>Record only rule IDs, label, score, and model version.</li>
+          <li>Do not log raw external documents by default.</li>
+        </ul>
+        <h3>Phase 3 — Deterministic transaction-risk baseline</h3>
+        <ul>
+          <li>Add amount, recipient novelty, velocity, policy flags, and injection signals.</li>
+          <li>Return an advisory risk result.</li>
+          <li>Allow risk to escalate or block, never weaken a policy denial.</li>
+        </ul>
+        <h3>Phase 4 — Evaluation harness</h3>
+        <ul>
+          <li>Add versioned labelled fixtures.</li>
+          <li>Add threshold sweeps and latency measurements.</li>
+          <li>Add adversarial regression tests.</li>
+          <li>Measure the baseline before considering ML.</li>
+        </ul>
+        <h3>Phase 5 — Optional model benchmark</h3>
+        <ul>
+          <li>Benchmark DistilBERT and ModernBERT locally.</li>
+          <li>Benchmark <code>jevos</code> as a supplementary yes/no signal.</li>
+          <li>Compare every candidate against the rule baseline.</li>
+          <li>Adopt a model only if recall improves without unacceptable false positives or latency.</li>
+        </ul>
+      </section>
+
+      <section id="first-step">
+        <h2>Single best first implementation step</h2>
+        <p>Freeze the AI/ML detector contract with the team and implement the deterministic baseline as an isolated package.</p>
+        <p>Exact files for that first implementation step:</p>
+        <pre>backend/app/ai_ml/contracts.py
+backend/app/ai_ml/injection_screen.py
+backend/tests/unit/test_ai_ml_injection_screen.py</pre>
+        <p>If the team accepts the existing untracked baseline, the equivalent files are the current <code>schemas.py</code>, <code>injection_screen.py</code>, and <code>test_injection_screen.py</code>.</p>
+        <div class="callout warning">
+          Implementation should not proceed until the input-source, label, threshold, persistence, failure, and ownership decisions above are agreed with the other teammates.
+        </div>
+      </section>
+
+      <footer class="muted small">
+        Generated from the read-only KiteShield repository audit. This document contains no secrets, credentials, private keys, or environment-variable values.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
