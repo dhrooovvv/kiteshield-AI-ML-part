@@ -191,7 +191,8 @@ class TestStalePolicy:
         await test_session.flush()
 
         # Issue token referencing policy v99
-        token, _ = cap_service.issue_token(
+        token, _ = await cap_service.issue_token(
+            session=test_session,
             action=test_action,
             policy_version=99,
         )

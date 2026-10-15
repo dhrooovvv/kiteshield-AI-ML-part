@@ -58,7 +58,8 @@ class TestTokenReplay:
     @pytest.mark.asyncio
     async def test_first_use_succeeds(self, signer, cap_service, test_action, seeded_session):
         """First use of a valid token should succeed (signs the tx)."""
-        token, claims = cap_service.issue_token(
+        token, claims = await cap_service.issue_token(
+            session=seeded_session,
             action=test_action,
             policy_version=1,
         )
@@ -75,7 +76,8 @@ class TestTokenReplay:
     @pytest.mark.asyncio
     async def test_second_use_rejected(self, signer, cap_service, test_action, seeded_session):
         """Second use of the same token → TokenConsumedError."""
-        token, claims = cap_service.issue_token(
+        token, claims = await cap_service.issue_token(
+            session=seeded_session,
             action=test_action,
             policy_version=1,
         )
@@ -100,8 +102,12 @@ class TestTokenReplay:
         self, signer, cap_service, test_action, seeded_session
     ):
         """Different tokens for the same action should each work once."""
-        token1, _ = cap_service.issue_token(action=test_action, policy_version=1)
-        token2, _ = cap_service.issue_token(action=test_action, policy_version=1)
+        token1, _ = await cap_service.issue_token(
+            session=seeded_session, action=test_action, policy_version=1
+        )
+        token2, _ = await cap_service.issue_token(
+            session=seeded_session, action=test_action, policy_version=1
+        )
 
         # Both should be different tokens
         assert token1 != token2

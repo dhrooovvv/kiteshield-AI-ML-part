@@ -551,7 +551,8 @@ async def sign_and_submit_proposal(
         approval_id = proposal.approval_request.id
 
     # Step 1: Issue capability token
-    token, claims = capability_service.issue_token(
+    token, claims = await capability_service.issue_token(
+        session=session,
         action=action,
         policy_version=active_policy.version,
         approval_id=approval_id,
@@ -598,7 +599,9 @@ async def sign_and_submit_proposal(
     proposal.status = ProposalStatus.SIGNED.value
     await session.flush()
 
-    submission = await blockchain_service.submit_raw_transaction(signed_result["raw_transaction"])
+    submission = await blockchain_service.submit_raw_transaction(
+        signed_result["raw_transaction"], session=session
+    )
     final_tx_hash = submission["tx_hash"]
 
     # Step 4: Record Transaction record

@@ -259,3 +259,16 @@ class SpendingRecord(Base):
         ),
         Index("idx_spending_period", "period_date", "status"),
     )
+
+
+class ExecutionControl(Base):
+    """Persistent singleton controlling whether execution is permitted."""
+
+    __tablename__ = "execution_control"
+
+    id = Column(String, primary_key=True)
+    active = Column(Boolean, nullable=False, default=False)
+    reason = Column(Text, nullable=False, default="")
+    changed_by = Column(String, nullable=False, default="system")
+    version = Column(Integer, nullable=False, default=0)
+    updated_at = Column(String, nullable=False, default=utc_now_str)

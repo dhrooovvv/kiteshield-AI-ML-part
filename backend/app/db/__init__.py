@@ -83,3 +83,24 @@ async def init_db():
         await conn.execute(text("PRAGMA foreign_keys=ON"))
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
+
+    # Bootstrap only when absent; an active switch is never reset on restart.
+    from sqlalchemy import select
+
+    from app.models import ExecutionControl
+
+    async with get_session_factory()() as session:
+        state = await session.scalar(
+            select(ExecutionControl).where(ExecutionControl.id == "global")
+        )
+        if state is None:
+            session.add(
+                ExecutionControl(
+                    id="global",
+                    active=False,
+                    reason="",
+                    changed_by="system",
+                    version=0,
+                )
+            )
+            await session.commit()

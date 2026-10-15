@@ -25,6 +25,7 @@ from app.api.routes import (
     health_router,
     policies_router,
     proposals_router,
+    security_router,
     transactions_router,
 )
 from app.core.config import get_settings
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals_router, prefix="/api/v1")
     app.include_router(transactions_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
+    app.include_router(security_router, prefix="/api/v1")
 
     return app
 

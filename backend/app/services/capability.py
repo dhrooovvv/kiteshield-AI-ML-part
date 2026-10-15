@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -30,8 +31,10 @@ from app.exceptions import (
     TokenInvalidError,
 )
 from app.schemas import NormalizedAction
+from app.services.emergency_stop import EmergencyStopService
 
 logger = get_logger("capability")
+emergency_stop_service = EmergencyStopService()
 
 # JWT constants
 _ISSUER = "kiteshield-capability-service"
@@ -85,8 +88,9 @@ class CapabilityService:
     - Record token metadata for replay protection
     """
 
-    def issue_token(
+    async def issue_token(
         self,
+        session: AsyncSession,
         action: NormalizedAction,
         policy_version: int,
         approval_id: str | None = None,
@@ -107,6 +111,8 @@ class CapabilityService:
             ApprovalRequiredError: If requires_approval but no approval_id
             AuthorizationError: If preconditions are not met
         """
+        await emergency_stop_service.require_running(session)
+
         # Validate escalation has approval
         if requires_approval and not approval_id:
             raise ApprovalRequiredError(
