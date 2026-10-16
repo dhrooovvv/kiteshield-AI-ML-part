@@ -9,7 +9,7 @@ Security:
 """
 
 import json
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,14 +19,96 @@ from app.core.security import verify_api_key
 from app.db import get_db_session
 from app.schemas import (
     APIResponse,
+    AuditCheckpointRequest,
+    AuditCheckpointResponse,
     AuditEventResponse,
+    AuditProofResponse,
+    AuditProofVerificationRequest,
     AuditTrailResponse,
 )
 from app.services.audit import AuditService
+from app.services.audit_checkpoint import AuditCheckpointService
 
 logger = get_logger("routes.audit")
 router = APIRouter(prefix="/audit", tags=["Audit"])
 audit_service = AuditService()
+checkpoint_service = AuditCheckpointService()
+
+
+def _checkpoint_response(checkpoint: Any) -> APIResponse:
+    return APIResponse(
+        data=AuditCheckpointResponse.model_validate(checkpoint, from_attributes=True),
+        meta={"correlation_id": correlation_id_var.get()},
+    )
+
+
+@router.post("/checkpoints", response_model=APIResponse)
+async def create_audit_checkpoint(
+    request: AuditCheckpointRequest,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[str, Depends(verify_api_key)],
+) -> APIResponse:
+    """Create and persist a Merkle checkpoint over an audit-event range."""
+    checkpoint = await checkpoint_service.create_checkpoint(
+        session=session,
+        first_event_id=request.first_event_id,
+        last_event_id=request.last_event_id,
+    )
+    return _checkpoint_response(checkpoint)
+
+
+@router.get("/checkpoints/{checkpoint_id}", response_model=APIResponse)
+async def get_audit_checkpoint(
+    checkpoint_id: str,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[str, Depends(verify_api_key)],
+) -> APIResponse:
+    """Retrieve a persisted Merkle checkpoint."""
+    checkpoint = await checkpoint_service.get_checkpoint(session, checkpoint_id)
+    return _checkpoint_response(checkpoint)
+
+
+@router.get(
+    "/checkpoints/{checkpoint_id}/proofs/{event_id}", response_model=APIResponse
+)
+async def generate_audit_proof(
+    checkpoint_id: str,
+    event_id: str,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[str, Depends(verify_api_key)],
+) -> APIResponse:
+    """Generate an inclusion proof for an event in a persisted checkpoint."""
+    proof = await checkpoint_service.generate_proof(
+        session=session, checkpoint_id=checkpoint_id, event_id=event_id
+    )
+    return APIResponse(
+        data=AuditProofResponse.model_validate(proof),
+        meta={"correlation_id": correlation_id_var.get()},
+    )
+
+
+@router.post(
+    "/checkpoints/{checkpoint_id}/proofs/verify", response_model=APIResponse
+)
+async def verify_audit_proof(
+    checkpoint_id: str,
+    request: AuditProofVerificationRequest,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[str, Depends(verify_api_key)],
+) -> APIResponse:
+    """Verify an inclusion proof against the persisted checkpoint root."""
+    proof = await checkpoint_service.verify_proof(
+        session=session,
+        checkpoint_id=checkpoint_id,
+        event_id=request.event_id,
+        index=request.index,
+        leaf_hash=request.leaf_hash,
+        proof=request.proof,
+    )
+    return APIResponse(
+        data=AuditProofResponse.model_validate(proof),
+        meta={"correlation_id": correlation_id_var.get()},
+    )
 
 
 @router.get("/integrity/verify", response_model=APIResponse)

@@ -41,7 +41,9 @@ class APIClient {
   private baseUrl: string;
 
   constructor() {
-    this.apiKey = localStorage.getItem('kiteshield_api_key') || import.meta.env.VITE_API_KEY || '';
+    // API credentials stay in memory only. VITE_* values are public build
+    // configuration and browser storage is not a suitable secret store.
+    this.apiKey = '';
     this.baseUrl = import.meta.env.VITE_API_BASE_URL || '/api/v1';
   }
 
@@ -51,7 +53,6 @@ class APIClient {
 
   public setApiKey(key: string): void {
     this.apiKey = key.trim();
-    localStorage.setItem('kiteshield_api_key', this.apiKey);
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -90,11 +91,39 @@ class APIClient {
     }
 
     if (!response.ok) {
-      const errorData = body as APIErrorDetails | null;
-      const code = errorData?.error?.code || `HTTP_${response.status}`;
-      const message = errorData?.error?.message || response.statusText || 'Unknown API Error';
-      const correlationId = errorData?.error?.correlation_id || response.headers.get('X-Correlation-ID') || undefined;
-      const details = errorData?.error?.details;
+      const errorData = body as APIErrorDetails | { detail?: unknown } | null;
+      const structuredError =
+        errorData && typeof errorData === 'object' && 'error' in errorData
+          ? errorData.error
+          : null;
+      const fastApiDetail =
+        errorData && typeof errorData === 'object' && 'detail' in errorData
+          ? errorData.detail
+          : null;
+      const detailObject =
+        fastApiDetail && typeof fastApiDetail === 'object' ? fastApiDetail : null;
+      const code =
+        structuredError?.code ||
+        (detailObject && 'code' in detailObject && typeof detailObject.code === 'string'
+          ? detailObject.code
+          : `HTTP_${response.status}`);
+      const message =
+        structuredError?.message ||
+        (typeof fastApiDetail === 'string'
+          ? fastApiDetail
+          : detailObject && 'message' in detailObject && typeof detailObject.message === 'string'
+            ? detailObject.message
+            : response.statusText || 'Unknown API Error');
+      const correlationId =
+        structuredError?.correlation_id ||
+        (detailObject && 'correlation_id' in detailObject && typeof detailObject.correlation_id === 'string'
+          ? detailObject.correlation_id
+          : response.headers.get('X-Correlation-ID') || undefined);
+      const details =
+        structuredError?.details ||
+        (detailObject && 'details' in detailObject && typeof detailObject.details === 'object'
+          ? (detailObject.details as Record<string, unknown>)
+          : undefined);
 
       throw new KiteShieldAPIError(message, response.status, code, correlationId, details);
     }

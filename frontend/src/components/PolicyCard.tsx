@@ -58,13 +58,141 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
 
   if (!policy) {
     return (
-      <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <ShieldAlert size={32} color="var(--color-amber)" style={{ marginBottom: '10px' }} />
-        <p>No active security policy found in system.</p>
-        <button className="btn btn-primary" style={{ marginTop: '14px' }} onClick={() => setShowEditor(true)}>
-          Create Initial Policy
-        </button>
-      </div>
+      <>
+        <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <ShieldAlert size={32} color="var(--color-amber)" style={{ marginBottom: '10px' }} />
+          <p>No active security policy found in system.</p>
+          <button className="btn btn-primary" style={{ marginTop: '14px' }} onClick={() => setShowEditor(true)}>
+            Create Initial Policy
+          </button>
+        </div>
+
+        {showEditor && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+              padding: '16px',
+            }}
+          >
+            <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', padding: '24px' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '6px' }}>
+                Create Initial Security Policy
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                Configure the deterministic limits used before any transaction can be authorized.
+              </p>
+
+              <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Max Amount per Transaction (ETH):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={maxEth}
+                    onChange={(e) => setMaxEth(e.target.value)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-light)',
+                      color: '#fff',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Human Escalation Threshold (ETH):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={escalateEth}
+                    onChange={(e) => setEscalateEth(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-light)',
+                      color: '#fff',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Daily Spending Budget (ETH):
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={dailyEth}
+                    onChange={(e) => setDailyEth(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-light)',
+                      color: '#fff',
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
+                    Allowed Recipients (one address per line):
+                  </label>
+                  <textarea
+                    value={allowedInput}
+                    onChange={(e) => setAllowedInput(e.target.value)}
+                    rows={3}
+                    className="font-mono"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-input)',
+                      border: '1px solid var(--border-light)',
+                      color: '#fff',
+                      fontSize: '0.78rem',
+                    }}
+                  />
+                </div>
+
+                {error && (
+                  <div style={{ color: '#fb7185', fontSize: '0.82rem', padding: '8px', background: 'rgba(244, 63, 94, 0.1)', borderRadius: '6px' }}>
+                    {error}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button type="button" className="btn btn-outline" onClick={() => setShowEditor(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={loading}>
+                    {loading ? 'Creating...' : 'Create Policy'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 

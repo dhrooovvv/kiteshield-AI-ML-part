@@ -176,6 +176,46 @@ class EmergencyStopResponse(BaseModel):
     updated_at: str
 
 
+class AuditCheckpointRequest(BaseModel):
+    """Optional inclusive audit-event range for a checkpoint."""
+
+    first_event_id: str | None = None
+    last_event_id: str | None = None
+
+
+class AuditCheckpointResponse(BaseModel):
+    """Persisted Merkle checkpoint metadata."""
+
+    id: str
+    merkle_root: str
+    first_event_id: str | None
+    last_event_id: str | None
+    event_count: int
+    created_at: str
+
+
+class AuditProofVerificationRequest(BaseModel):
+    """Untrusted proof material submitted for verification."""
+
+    event_id: str
+    index: int
+    leaf_hash: str
+    proof: list[dict[str, str]]
+
+
+class AuditProofResponse(BaseModel):
+    """Inclusion proof bound to a persisted checkpoint and event."""
+
+    checkpoint_id: str
+    event_id: str
+    index: int
+    leaf_hash: str
+    proof: list[dict[str, str]]
+    total_leaves: int
+    merkle_root: str
+    valid: bool | None = None
+
+
 # ---- Response Schemas ----
 
 
