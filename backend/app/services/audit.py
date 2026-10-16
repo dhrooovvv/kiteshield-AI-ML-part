@@ -32,6 +32,9 @@ from app.models import AuditEvent
 
 logger = get_logger("audit")
 
+_CHRONOLOGICAL_ORDER = (AuditEvent.created_at.asc(), AuditEvent.id.asc())
+_REVERSE_CHRONOLOGICAL_ORDER = (AuditEvent.created_at.desc(), AuditEvent.id.desc())
+
 # Fields that must never appear in audit event details
 _FORBIDDEN_FIELDS = frozenset(
     {
@@ -118,7 +121,7 @@ class AuditService:
 
         # Get the previous event's hash for chain linking
         result = await session.execute(
-            select(AuditEvent.event_hash).order_by(AuditEvent.created_at.desc()).limit(1)
+            select(AuditEvent.event_hash).order_by(*_REVERSE_CHRONOLOGICAL_ORDER).limit(1)
         )
         previous_hash = result.scalar_one_or_none()
 
@@ -163,7 +166,7 @@ class AuditService:
         result = await session.execute(
             select(AuditEvent)
             .where(AuditEvent.correlation_id == correlation_id)
-            .order_by(AuditEvent.created_at.asc())
+            .order_by(*_CHRONOLOGICAL_ORDER)
         )
         return list(result.scalars().all())
 
@@ -179,7 +182,7 @@ class AuditService:
         a determined attacker with database access.
         """
         result = await session.execute(
-            select(AuditEvent).order_by(AuditEvent.created_at.asc()).limit(limit)
+            select(AuditEvent).order_by(*_CHRONOLOGICAL_ORDER).limit(limit)
         )
         events = list(result.scalars().all())
 

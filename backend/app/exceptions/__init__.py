@@ -34,6 +34,19 @@ class ValidationError(KiteShieldError):
     status_code = 422
 
 
+class PromptInjectionDetectedError(ValidationError):
+    """Untrusted agent input was rejected by the prompt-injection screen."""
+
+    error_code = "PROMPT_INJECTION_DETECTED"
+
+
+class PromptScreeningUnavailableError(KiteShieldError):
+    """The required prompt-injection screen could not produce a result."""
+
+    error_code = "PROMPT_SCREENING_UNAVAILABLE"
+    status_code = 503
+
+
 class InvalidAddressError(ValidationError):
     """Ethereum address is invalid or not checksummed."""
 
@@ -195,6 +208,41 @@ class EmergencyStopUnavailableError(EmergencyStopError):
 
     error_code = "EMERGENCY_STOP_UNAVAILABLE"
     status_code = 503
+
+
+class AuditCheckpointError(KiteShieldError):
+    """Base error for persistent audit checkpoint operations."""
+
+    error_code = "AUDIT_CHECKPOINT_ERROR"
+    status_code = 503
+
+
+class AuditCheckpointRangeError(AuditCheckpointError):
+    """Requested checkpoint range is invalid."""
+
+    error_code = "AUDIT_CHECKPOINT_RANGE_INVALID"
+    status_code = 422
+
+
+class AuditCheckpointNotFoundError(AuditCheckpointError):
+    """Requested checkpoint does not exist."""
+
+    error_code = "AUDIT_CHECKPOINT_NOT_FOUND"
+    status_code = 404
+
+
+class AuditProofEventNotFoundError(AuditCheckpointError):
+    """Requested audit event does not exist."""
+
+    error_code = "AUDIT_PROOF_EVENT_NOT_FOUND"
+    status_code = 404
+
+
+class AuditProofInvalidError(AuditCheckpointError):
+    """Inclusion proof does not match the persisted checkpoint."""
+
+    error_code = "AUDIT_PROOF_INVALID"
+    status_code = 422
 
 
 # ---- Blockchain Errors ----

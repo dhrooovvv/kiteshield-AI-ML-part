@@ -236,6 +236,19 @@ class AuditEvent(Base):
     created_at = Column(String, nullable=False, default=utc_now_str, index=True)
 
 
+class AuditCheckpoint(Base):
+    """Persisted Merkle checkpoint over an ordered audit-event range."""
+
+    __tablename__ = "audit_checkpoints"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    merkle_root = Column(String, nullable=False)
+    first_event_id = Column(String, nullable=True)
+    last_event_id = Column(String, nullable=True)
+    event_count = Column(Integer, nullable=False)
+    created_at = Column(String, nullable=False, default=utc_now_str, index=True)
+
+
 class SpendingRecord(Base):
     """Spending tracker for rate/daily limits.
 
