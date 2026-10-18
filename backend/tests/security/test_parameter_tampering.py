@@ -16,6 +16,12 @@ from app.exceptions import SigningRejectedError, TokenMismatchError
 from app.schemas import NormalizedAction
 from app.services.capability import CapabilityService
 from app.services.signer import IsolatedSigner
+from tests.authorization_support import seed_authorization
+
+
+@pytest.fixture(autouse=True)
+async def authorized_context(test_session, original_action):
+    await seed_authorization(test_session, original_action)
 
 
 @pytest.fixture

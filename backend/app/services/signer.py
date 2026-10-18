@@ -2,7 +2,7 @@
 KiteShield Wallet — Isolated Signer
 
 Independently verifies capability tokens and transaction parameters
-before signing. This module represents a separate trust boundary.
+before signing. This is logical isolation inside the same process, not hardware/process isolation.
 
 Security invariants enforced:
 - SI-7: Signer independently verifies authorization
@@ -31,10 +31,12 @@ The signer DOES verify:
 11. Policy version is still active
 """
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -44,10 +46,12 @@ from app.exceptions import (
     TokenConsumedError,
     TokenMismatchError,
 )
-from app.models import CapabilityToken, Policy
+from app.models import CapabilityToken, ExecutionAttempt, Policy, SpendingRecord
 from app.schemas import NormalizedAction
+from app.services.authorization import validate_authorization
 from app.services.capability import CapabilityService
 from app.services.emergency_stop import EmergencyStopService
+from app.services.execution_lock import lock_execution
 
 logger = get_logger("signer")
 emergency_stop_service = EmergencyStopService()
@@ -104,11 +108,15 @@ class IsolatedSigner:
             TokenMismatchError: Transaction params don't match token
             SigningRejectedError: Any other verification failure
         """
+        await lock_execution(session)
         await emergency_stop_service.require_running(session)
         # ===== STEP 1: Verify JWT signature and basic claims =====
         # This re-verifies independently — does not trust API assertion
         claims = self._capability_service.verify_token(token)
         jti = claims["jti"]
+        known_token = await session.get(CapabilityToken, jti, populate_existing=True)
+        if known_token is not None and known_token.consumed:
+            raise TokenConsumedError("Authorization already consumed")
 
         logger.info("Signer: verifying token jti=%s for proposal=%s", jti, claims["proposal_id"])
 
@@ -178,41 +186,83 @@ class IsolatedSigner:
                 details={"check": "policy_version"},
             )
 
-        # ===== STEP 8: Atomic token consumption (replay protection) =====
-        # Check if token exists and is not consumed
-        token_result = await session.execute(
-            select(CapabilityToken).where(CapabilityToken.jti == jti)
+        await validate_authorization(
+            session, action, claims["policy_version"], claims.get("approval_id")
         )
-        token_record = token_result.scalar_one_or_none()
+        attempt = await session.get(
+            ExecutionAttempt, claims.get("execution_id"), populate_existing=True
+        )
+        if (
+            not attempt
+            or attempt.proposal_id != action.proposal_id
+            or attempt.status != "PREPARED"
+            or hashlib.sha256(attempt.envelope.encode()).hexdigest()
+            != claims.get("envelope_digest")
+        ):
+            raise SigningRejectedError("Missing or mismatched executable authorization")
+        reservation = await session.get(SpendingRecord, attempt.id)
+        if (
+            not reservation
+            or reservation.status != "RESERVED"
+            or int(reservation.amount_wei) != action.amount_wei
+        ):
+            raise SigningRejectedError("Execution has no valid spending reservation")
+        envelope = json.loads(attempt.envelope)
+        settings = get_settings()
+        from eth_account import Account
 
-        if token_record is not None:
-            if token_record.consumed:
-                raise TokenConsumedError(
-                    f"Capability token {jti} has already been consumed (replay attempt detected)",
-                )
-            # Mark as consumed atomically
-            token_record.consumed = True
-            token_record.consumed_at = datetime.now(UTC).isoformat()
-            await session.flush()
-        else:
-            # Token record not found — create and consume it atomically
-            # This handles the case where the record wasn't pre-created
-            new_record = CapabilityToken(
-                jti=jti,
-                proposal_id=claims["proposal_id"],
-                tx_digest=claims["tx_digest"],
-                consumed=True,
-                consumed_at=datetime.now(UTC).isoformat(),
-                expires_at=datetime.fromtimestamp(claims["exp"], tz=UTC).isoformat(),
+        sender = Account.from_key(self._load_key()).address.lower()
+        integer_fields = (
+            "value",
+            "chainId",
+            "nonce",
+            "gas",
+            "maxFeePerGas",
+            "maxPriorityFeePerGas",
+            "type",
+        )
+        if not isinstance(envelope, dict) or any(
+            type(envelope.get(field)) is not int for field in integer_fields
+        ):
+            raise SigningRejectedError("Malformed executable envelope")
+        if (
+            sender != attempt.sender
+            or envelope.get("to", "").lower() != action.recipient.lower()
+            or envelope.get("value") != action.amount_wei
+            or envelope.get("chainId") != action.chain_id
+            or envelope.get("nonce") != attempt.nonce
+            or not 21000 <= envelope.get("gas", 0) <= settings.max_gas_units
+            or not 0
+            < envelope.get("maxPriorityFeePerGas", 0)
+            <= envelope.get("maxFeePerGas", 0)
+            <= settings.max_fee_per_gas_wei
+            or envelope.get("maxPriorityFeePerGas", 0) > settings.max_priority_fee_per_gas_wei
+            or set(envelope)
+            != {
+                "to",
+                "value",
+                "chainId",
+                "nonce",
+                "gas",
+                "maxFeePerGas",
+                "maxPriorityFeePerGas",
+                "type",
+            }
+            or envelope.get("type") != 2
+        ):
+            raise SigningRejectedError("Executable envelope violates signer constraints")
+        consumed = await session.execute(
+            update(CapabilityToken)
+            .where(
+                CapabilityToken.jti == jti,
+                CapabilityToken.proposal_id == action.proposal_id,
+                CapabilityToken.tx_digest == claims["tx_digest"],
+                CapabilityToken.consumed.is_(False),
             )
-            session.add(new_record)
-            try:
-                await session.flush()
-            except Exception as e:
-                # If insertion fails (duplicate jti), it's a replay
-                raise TokenConsumedError(
-                    "Capability token consumption failed — possible replay"
-                ) from e
+            .values(consumed=True, consumed_at=datetime.now(UTC).isoformat())
+        )
+        if consumed.rowcount != 1:
+            raise TokenConsumedError("Unknown or already consumed authorization")
 
         # ===== STEP 9: Sign the transaction =====
         logger.info(
@@ -229,10 +279,11 @@ class IsolatedSigner:
                 to_address=action.recipient,
                 amount_wei=action.amount_wei,
                 chain_id=action.chain_id,
+                envelope=envelope,
             )
         except Exception as e:
             raise SigningRejectedError(
-                f"Transaction signing failed: {e}",
+                "Transaction signing failed",
             ) from e
 
         logger.info(
@@ -240,6 +291,8 @@ class IsolatedSigner:
             action.proposal_id,
             signed_tx.get("tx_hash", "unknown"),
         )
+        attempt.status = "SIGNED"
+        await session.flush()
 
         return signed_tx
 
@@ -249,6 +302,7 @@ class IsolatedSigner:
         to_address: str,
         amount_wei: int,
         chain_id: int,
+        envelope: dict[str, Any],
     ) -> dict[str, Any]:
         """Sign an Ethereum transaction using web3.py.
 
@@ -259,24 +313,8 @@ class IsolatedSigner:
             Dict with raw_transaction, tx_hash (for local tracking)
         """
         from eth_account import Account
-        from web3 import Web3
 
-        # Build transaction dict
-        # Note: nonce and gas will be fetched from chain during submission
-        # For now, we sign a minimal transaction structure
-        checksum_to = Web3.to_checksum_address(to_address)
-        tx = {
-            "to": checksum_to,
-            "value": amount_wei,
-            "chainId": chain_id,
-            # These will be populated by the blockchain adapter
-            # before actual submission
-            "nonce": 0,  # Placeholder — blockchain adapter fills this
-            "gas": 21000,  # Standard ETH transfer gas
-            "maxFeePerGas": 50_000_000_000,  # 50 gwei placeholder
-            "maxPriorityFeePerGas": 2_000_000_000,  # 2 gwei placeholder
-            "type": 2,  # EIP-1559
-        }
+        tx = envelope
 
         # Sign the transaction
         signed = Account.sign_transaction(tx, private_key)

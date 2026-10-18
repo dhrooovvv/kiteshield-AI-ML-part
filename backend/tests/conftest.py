@@ -17,6 +17,12 @@ os.environ.update(
         "APP_DEBUG": "false",
         "CAPABILITY_TOKEN_SECRET": "a" * 64,  # Test-only secret (64 hex chars)
         "API_KEY": "test-api-key-for-unit-tests-only",
+        "APPROVER_API_KEY": "test-human-approver-key-only",
+        "POLICY_ADMIN_API_KEY": "test-policy-admin-key-only",
+        "EXECUTION_MODE": "simulated",
+        "AUTO_EXECUTE_ENABLED": "false",
+        "AUTO_EXECUTE_MAX_ETH": "0.0001",
+        "LEARNED_SCREENING_ENABLED": "false",
         "EMERGENCY_STOP_ADMIN_API_KEY": "test-emergency-stop-admin-key",
         "CHAIN_ID": "11155111",
         "SEPOLIA_RPC_URL": "https://mock-rpc.test/v1",

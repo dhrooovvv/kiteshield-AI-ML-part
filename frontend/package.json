@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "node --test --experimental-strip-types tests/*.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
+    "frappe-ui": "^1.0.2",
     "lucide-react": "^1.55.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

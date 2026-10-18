@@ -9,6 +9,7 @@ import pytest
 async def test_checkpoint_endpoint_creates_and_retrieves_checkpoint(auth_client):
     await auth_client.post(
         "/api/v1/policies",
+        headers={"X-API-Key": "test-policy-admin-key-only"},
         json={
             "max_amount_wei": "1000000000000000000",
             "allowed_recipients": ["0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"],
@@ -32,9 +33,7 @@ async def test_checkpoint_endpoint_creates_and_retrieves_checkpoint(auth_client)
     assert checkpoint["event_count"] >= 2
     assert len(checkpoint["merkle_root"]) == 64
 
-    retrieved = await auth_client.get(
-        f"/api/v1/audit/checkpoints/{checkpoint['id']}"
-    )
+    retrieved = await auth_client.get(f"/api/v1/audit/checkpoints/{checkpoint['id']}")
     assert retrieved.status_code == 200
     assert retrieved.json()["data"] == checkpoint
 
@@ -80,9 +79,7 @@ async def test_empty_checkpoint_is_explicit(auth_client):
     assert data["first_event_id"] is None
     assert data["last_event_id"] is None
 
-    proof = await auth_client.get(
-        f"/api/v1/audit/checkpoints/{data['id']}/proofs/missing"
-    )
+    proof = await auth_client.get(f"/api/v1/audit/checkpoints/{data['id']}/proofs/missing")
     assert proof.status_code == 422
 
 

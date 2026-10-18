@@ -18,6 +18,15 @@ emergency_stop_service = EmergencyStopService()
 audit_service = AuditService()
 
 
+@router.get("/identity", response_model=APIResponse)
+async def credential_identity(actor: Annotated[str, Depends(verify_api_key)]) -> APIResponse:
+    """Report the authenticated role, never a key or caller-supplied role claim."""
+    return APIResponse(
+        data={"role": actor},
+        meta={"correlation_id": correlation_id_var.get()},
+    )
+
+
 def _response(state) -> APIResponse:
     # Prevent accidental reflection if an operator includes the credential in
     # an incident reason. The credential itself is never returned or logged.

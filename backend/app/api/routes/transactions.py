@@ -15,9 +15,10 @@ from app.core.logging import correlation_id_var, get_logger
 from app.core.security import verify_api_key
 from app.db import get_db_session
 from app.exceptions import NotFoundError
-from app.models import Transaction, utc_now_str
+from app.models import Transaction
 from app.schemas import APIResponse, TransactionResponse
 from app.services.blockchain import BlockchainService
+from app.services.receipt import reconcile_receipt, transaction_response
 
 logger = get_logger("routes.transactions")
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
@@ -26,16 +27,7 @@ blockchain_service = BlockchainService()
 
 def _format_transaction(tx: Transaction) -> TransactionResponse:
     """Map DB Transaction model to TransactionResponse schema."""
-    return TransactionResponse(
-        id=tx.id,
-        tx_hash=tx.tx_hash,
-        status=tx.status,
-        block_number=tx.block_number,
-        gas_used=tx.gas_used,
-        error_message=tx.error_message,
-        created_at=tx.created_at,
-        updated_at=tx.updated_at,
-    )
+    return transaction_response(tx)
 
 
 @router.get("/{tx_id}", response_model=APIResponse)
@@ -57,26 +49,7 @@ async def get_transaction(
     if not tx:
         raise NotFoundError(f"Transaction {tx_id} not found")
 
-    # If status is SUBMITTED and tx_hash is present, try checking receipt
-    if tx.status == "SUBMITTED" and tx.tx_hash:
-        receipt = await blockchain_service.get_transaction_receipt(tx.tx_hash)
-        if receipt:
-            if receipt.get("status") == 1:
-                tx.status = "CONFIRMED"
-                tx.block_number = receipt.get("blockNumber")
-                tx.gas_used = receipt.get("gasUsed")
-                tx.updated_at = utc_now_str()
-                if tx.proposal:
-                    tx.proposal.status = "CONFIRMED"
-                    tx.proposal.updated_at = utc_now_str()
-            elif receipt.get("status") == 0:
-                tx.status = "FAILED"
-                tx.error_message = "On-chain execution reverted"
-                tx.updated_at = utc_now_str()
-                if tx.proposal:
-                    tx.proposal.status = "TX_FAILED"
-                    tx.proposal.updated_at = utc_now_str()
-            await session.flush()
+    await reconcile_receipt(session, tx, blockchain_service)
 
     return APIResponse(data=_format_transaction(tx), meta={"correlation_id": cid})
 

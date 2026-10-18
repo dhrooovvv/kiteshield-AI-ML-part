@@ -70,3 +70,39 @@ def test_three_layer_or_requires_no_production_authority() -> None:
 
     assert result.classification is ExperimentalClassification.ATTACK
     assert result.recommended_next_step == "retain_policy_checks"
+
+
+@pytest.mark.parametrize(
+    ("horizon_attack", "bastion_attack", "expected"),
+    [
+        (True, False, ExperimentalClassification.REVIEW),
+        (False, True, ExperimentalClassification.REVIEW),
+        (True, True, ExperimentalClassification.ATTACK),
+        (False, False, ExperimentalClassification.BENIGN),
+    ],
+)
+def test_three_layer_outcomes_distinguish_disagreement(
+    horizon_attack: bool,
+    bastion_attack: bool,
+    expected: ExperimentalClassification,
+) -> None:
+    result = decide(
+        "three_layer_or",
+        horizon=signal("horizon", horizon_attack),
+        bastion=signal("bastion", bastion_attack),
+        rules=signal("rules", False, 0.5),
+    )
+
+    assert result.classification is expected
+
+
+def test_three_layer_rules_attack_remains_blocking() -> None:
+    result = decide(
+        "three_layer_or",
+        horizon=signal("horizon", False),
+        bastion=signal("bastion", False),
+        rules=signal("rules", True),
+    )
+
+    assert result.classification is ExperimentalClassification.ATTACK
+    assert result.reason_code == "rules_positive"

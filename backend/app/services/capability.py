@@ -16,11 +16,13 @@ Token spec (see ADR-003):
 - Single-use: enforced by DB consumption record
 """
 
+import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -30,8 +32,11 @@ from app.exceptions import (
     TokenExpiredError,
     TokenInvalidError,
 )
+from app.models import CapabilityToken, ExecutionAttempt
 from app.schemas import NormalizedAction
+from app.services.authorization import validate_authorization
 from app.services.emergency_stop import EmergencyStopService
+from app.services.execution_lock import lock_execution
 
 logger = get_logger("capability")
 emergency_stop_service = EmergencyStopService()
@@ -111,6 +116,7 @@ class CapabilityService:
             ApprovalRequiredError: If requires_approval but no approval_id
             AuthorizationError: If preconditions are not met
         """
+        await lock_execution(session)
         await emergency_stop_service.require_running(session)
 
         # Validate escalation has approval
@@ -118,6 +124,12 @@ class CapabilityService:
             raise ApprovalRequiredError(
                 "Escalated action requires human approval before token issuance"
             )
+        await validate_authorization(session, action, policy_version, approval_id)
+        attempt = await session.scalar(
+            select(ExecutionAttempt).where(ExecutionAttempt.proposal_id == action.proposal_id)
+        )
+        if attempt is None or attempt.status != "PREPARED":
+            raise TokenInvalidError("A reserved execution envelope is required")
 
         # Generate nonce and compute transaction digest
         nonce = str(uuid.uuid4())
@@ -131,6 +143,17 @@ class CapabilityService:
             policy_version=policy_version,
             approval_id=approval_id,
         )
+        claims["execution_id"] = attempt.id
+        claims["envelope_digest"] = hashlib.sha256(attempt.envelope.encode()).hexdigest()
+        if approval_id:
+            from app.models import ApprovalRequest
+
+            approval = await session.get(ApprovalRequest, approval_id)
+            if approval is None:
+                raise ApprovalRequiredError("Approval is unavailable")
+            claims["exp"] = min(
+                claims["exp"], int(datetime.fromisoformat(approval.expires_at).timestamp())
+            )
 
         # Sign token
         settings = get_settings()
@@ -139,6 +162,16 @@ class CapabilityService:
             settings.capability_token_secret,
             algorithm="HS256",
         )
+        session.add(
+            CapabilityToken(
+                jti=claims["jti"],
+                proposal_id=action.proposal_id,
+                tx_digest=tx_digest,
+                consumed=False,
+                expires_at=datetime.fromtimestamp(claims["exp"], tz=UTC).isoformat(),
+            )
+        )
+        await session.flush()
 
         logger.info(
             "Capability token issued: jti=%s, proposal=%s, recipient=%s, amount=%s, expires_in=%ds",
@@ -176,7 +209,7 @@ class CapabilityService:
                 algorithms=["HS256"],
                 issuer=_ISSUER,
                 audience=_AUDIENCE,
-                leeway=timedelta(seconds=settings.clock_skew_seconds),
+                leeway=0,
                 options={
                     "require": [
                         "jti",
@@ -216,6 +249,18 @@ class CapabilityService:
             raise TokenInvalidError(
                 f"Token chain_id {claims.get('chain_id')} does not match Sepolia (11155111)"
             )
+        if (
+            any(
+                not isinstance(claims.get(key), str) or not claims[key]
+                for key in ("jti", "proposal_id", "nonce", "tx_digest", "recipient", "amount_wei")
+            )
+            or type(claims.get("policy_version")) is not int
+            or not claims["amount_wei"].isdigit()
+            or int(claims["amount_wei"]) <= 0
+        ):
+            raise TokenInvalidError("Malformed authorization claims")
+        if claims.get("approval_id") is not None and not isinstance(claims["approval_id"], str):
+            raise TokenInvalidError("Malformed approval claim")
 
         logger.info(
             "Capability token verified: jti=%s, proposal=%s",

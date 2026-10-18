@@ -1,0 +1,45 @@
+{
+  "status": "APPLIED_AND_VERIFIED",
+  "env_gitignored": true,
+  "env_tracked": false,
+  "env_permissions": "0600",
+  "credential_stored_only_in": "backend/.env",
+  "credential_printed": false,
+  "distinct_from_other_credentials": true,
+  "admin_identity_verified": true,
+  "previous_policy_version": 5,
+  "active_policy": {
+    "id": "06d62d15-1893-468b-a894-0da4c44ed906",
+    "version": 6,
+    "max_amount_wei": "1000000000000000000",
+    "daily_limit_wei": "5000000000000000000",
+    "allowed_recipients": [
+      "0x742d35cc6634c0532925A3b844bc9E7595F2Bd1e",
+      "0x229D5588641f2614e3F486c853D8BA0eC5FFe811"
+    ],
+    "blocked_recipients": null,
+    "escalation_threshold_wei": "500000000000000000",
+    "is_active": true,
+    "created_at": "2026-10-17T20:07:51.008664+00:00"
+  },
+  "previous_policy_deactivated": true,
+  "recipient_explicitly_allowlisted": true,
+  "audit_entry": {
+    "id": "5ca10822-2275-4d5a-87df-d6b269c335d1",
+    "event_type": "POLICY_UPDATED",
+    "actor": "policy_administrator",
+    "policy_version": 6,
+    "created_at": "2026-10-17T20:07:51.009622+00:00",
+    "correlation_id": "c7b61aee-829b-451a-ae6c-7373f751738c",
+    "details": {
+      "new_policy_id": "06d62d15-1893-468b-a894-0da4c44ed906",
+      "previous_policy_id": "f17cce0a-5465-4233-9a72-af28a6da9743",
+      "version": 6
+    },
+    "previous_hash": "e252037f0f65cde76109f14937c172603d0bdb0330a38084c5a9756ce5a75532",
+    "event_hash": "ed98727a18a6a0fd41590a21b741fc4759b9f8f752f5ff114124f6bdcad51266"
+  },
+  "agent_future_admin_or_approver_actions": "Not authorized; user will perform them in dashboard",
+  "signing_performed": false,
+  "broadcast_performed": false
+}

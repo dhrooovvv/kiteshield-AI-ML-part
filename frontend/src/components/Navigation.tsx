@@ -5,14 +5,16 @@ import {
   UserCheck,
   ShieldCheck,
   History,
+  Wallet,
 } from 'lucide-react';
 
-export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit';
+export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio';
 
 interface NavigationProps {
   currentTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   pendingApprovalsCount: number;
+  promptReviewsCount: number;
   totalProposalsCount: number;
 }
 
@@ -20,6 +22,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   currentTab,
   onTabChange,
   pendingApprovalsCount,
+  promptReviewsCount,
   totalProposalsCount,
 }) => {
   const tabs = [
@@ -28,6 +31,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       label: 'Overview',
       icon: <LayoutDashboard size={18} />,
     },
+    { id: 'portfolio' as NavTab, label: 'Portfolio', icon: <Wallet size={18} /> },
     {
       id: 'proposals' as NavTab,
       label: 'Proposals',
@@ -38,7 +42,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       id: 'approvals' as NavTab,
       label: 'Human Approvals',
       icon: <UserCheck size={18} />,
-      badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : undefined,
+      badge: pendingApprovalsCount + promptReviewsCount > 0 ? pendingApprovalsCount + promptReviewsCount : undefined,
       badgeColor: 'var(--color-amber)',
     },
     {
@@ -54,56 +58,27 @@ export const Navigation: React.FC<NavigationProps> = ({
   ];
 
   return (
-    <nav
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        borderBottom: '1px solid var(--border-light)',
-        padding: '0 24px',
-        background: 'rgba(10, 16, 29, 0.4)',
-        overflowX: 'auto',
-      }}
-    >
-      <div style={{ maxWidth: '1440px', width: '100%', margin: '0 auto', display: 'flex', gap: '8px' }}>
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div>
+          <strong>KiteShield</strong>
+        </div>
+      </div>
+      <nav className="sidebar-nav" aria-label="Primary navigation">
         {tabs.map((tab) => {
           const isActive = currentTab === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '14px 16px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: `2px solid ${isActive ? 'var(--color-cyan)' : 'transparent'}`,
-                color: isActive ? '#fff' : 'var(--text-muted)',
-                fontWeight: isActive ? 600 : 500,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                whiteSpace: 'nowrap',
-                fontFamily: 'var(--font-main)',
-              }}
+              className={`sidebar-link${isActive ? ' active' : ''}`}
+              aria-current={isActive ? 'page' : undefined}
             >
-              <span style={{ color: isActive ? 'var(--color-cyan)' : 'inherit' }}>{tab.icon}</span>
+              <span>{tab.icon}</span>
               <span>{tab.label}</span>
               {tab.badge !== undefined && (
                 <span
-                  style={{
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    padding: '2px 7px',
-                    borderRadius: '10px',
-                    background: tab.badgeColor
-                      ? 'rgba(245, 158, 11, 0.2)'
-                      : 'rgba(255, 255, 255, 0.1)',
-                    color: tab.badgeColor || '#fff',
-                    border: tab.badgeColor ? '1px solid rgba(245, 158, 11, 0.4)' : 'none',
-                  }}
+                  className="sidebar-badge"
                 >
                   {tab.badge}
                 </span>
@@ -111,7 +86,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             </button>
           );
         })}
-      </div>
-    </nav>
+      </nav>
+    </aside>
   );
 };

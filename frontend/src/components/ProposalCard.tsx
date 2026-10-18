@@ -5,12 +5,14 @@ import {
   History,
   Lock,
   Clock,
-  CheckCircle,
   FileText,
 } from 'lucide-react';
 import { DecisionBadge } from './DecisionBadge.tsx';
 import { StatusBadge } from './StatusBadge.tsx';
+import { humanizeEvent } from '../auditPresentation.ts';
 import { api } from '../api/client.ts';
+import { weiToEth } from '../amounts.ts';
+import { useRole } from '../useCredentials.ts';
 import type { Proposal } from '../types/index.ts';
 
 interface ProposalCardProps {
@@ -18,6 +20,7 @@ interface ProposalCardProps {
   onUpdated: (updated: Proposal) => void;
   onOpenAudit: (correlationId: string) => void;
   onOpenDetails: (proposal: Proposal) => void;
+  executionMode?: 'simulated' | 'sepolia';
 }
 
 export const ProposalCard: React.FC<ProposalCardProps> = ({
@@ -25,7 +28,9 @@ export const ProposalCard: React.FC<ProposalCardProps> = ({
   onUpdated,
   onOpenAudit,
   onOpenDetails,
+  executionMode,
 }) => {
+  const hasRequiredRole = useRole('proposer');
   const [evaluating, setEvaluating] = useState(false);
   const [signing, setSigning] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -56,282 +61,125 @@ export const ProposalCard: React.FC<ProposalCardProps> = ({
     }
   };
 
-  const isSignable = proposal.status === 'ALLOWED' || proposal.status === 'APPROVED';
+  // UI guidance only; backend authorization remains authoritative.
+  const automatic = proposal.status === 'ALLOWED' && proposal.auto_execution_enabled &&
+    /^\d+$/.test(proposal.amount_wei ?? '') &&
+    /^\d+$/.test(proposal.auto_execution_max_wei ?? '') &&
+    BigInt(proposal.amount_wei) <= BigInt(proposal.auto_execution_max_wei!);
+  const isSignable = !automatic &&
+    (proposal.status === 'ALLOWED' || proposal.status === 'APPROVED');
+  const isResumable = proposal.status === 'SIGNED';
   const isBlocked = proposal.status === 'BLOCKED';
   const isEscalated = proposal.status === 'ESCALATED';
-  const isSubmitted = proposal.status === 'SUBMITTED' || proposal.status === 'CONFIRMED';
+  const reasons = proposal.policy_decision?.reason_codes ?? [];
 
   return (
-    <div
-      className="glass-panel"
-      style={{
-        padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        borderLeft: isBlocked
-          ? '4px solid var(--color-rose)'
-          : isEscalated
-          ? '4px solid var(--color-amber)'
-          : isSignable
-          ? '4px solid var(--color-emerald)'
-          : isSubmitted
-          ? '4px solid var(--color-cyan)'
-          : '4px solid var(--color-blue)',
-      }}
-    >
-      {/* Top Header: ID, Date, Badges */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="font-mono" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-            #{proposal.id.slice(0, 8)}
-          </span>
+    <article className="glass-panel proposal-card proposal-card-compact" aria-label={`Proposal ${proposal.id.slice(0, 8)}`}>
+      <header className="proposal-card-heading">
+        <div className="proposal-card-identity">
+          <span className="proposal-card-id">#{proposal.id.slice(0, 8)}</span>
           <StatusBadge status={proposal.status} />
         </div>
+        <time className="proposal-card-date" dateTime={proposal.created_at}>
+          {new Date(proposal.created_at).toLocaleString(undefined, {
+            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          })}
+        </time>
+      </header>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <DecisionBadge
-            decision={proposal.policy_decision?.decision}
-            reasons={proposal.policy_decision?.reason_codes}
-            showReasons={false}
-          />
+      <dl className="proposal-card-facts">
+        <div className="proposal-card-amount">
+          <dt>Amount</dt>
+          <dd>{proposal.amount_eth} <span>ETH</span></dd>
         </div>
-      </div>
-
-      {/* Prompt summary */}
-      <div
-        style={{
-          background: 'var(--bg-subtle)',
-          padding: '10px 14px',
-          borderRadius: '8px',
-          border: '1px solid var(--border-light)',
-          fontSize: '0.88rem',
-          color: '#e2e8f0',
-        }}
-      >
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 600 }}>
-          Agent Prompt
+        <div className="proposal-card-recipient">
+          <dt>Recipient</dt>
+          <dd>{proposal.recipient}</dd>
         </div>
-        &ldquo;{proposal.prompt}&rdquo;
-      </div>
-
-      {/* Key Details Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '12px',
-          fontSize: '0.85rem',
-        }}
-      >
         <div>
-          <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Destination Address</span>
-          <span className="font-mono" style={{ color: 'var(--color-cyan)', fontSize: '0.8rem', wordBreak: 'break-all' }}>
-            {proposal.recipient}
-          </span>
+          <dt>Network</dt>
+          <dd>{proposal.chain_id === 11155111 ? 'Ethereum Sepolia' : `Chain ${proposal.chain_id}`}</dd>
         </div>
+      </dl>
 
-        <div>
-          <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Transfer Amount</span>
-          <span style={{ fontWeight: 700, color: '#fff', fontSize: '1rem' }}>
-            {proposal.amount_eth} ETH
-          </span>
-          <span className="font-mono" style={{ color: 'var(--text-dim)', fontSize: '0.72rem', display: 'block' }}>
-            ({proposal.amount_wei} wei)
-          </span>
-        </div>
+      <p className="proposal-card-prompt">{proposal.prompt}</p>
 
-        <div>
-          <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Target Chain</span>
-          <span style={{ color: 'var(--text-muted)' }}>
-            Ethereum Sepolia (11155111)
-          </span>
-        </div>
-      </div>
-
-      {/* Decision Reason Codes (if evaluated) */}
-      {proposal.policy_decision?.reason_codes && proposal.policy_decision.reason_codes.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Policy Engine Reasons:</span>
-          {proposal.policy_decision.reason_codes.map((code, idx) => (
-            <span
-              key={idx}
-              className="font-mono"
-              style={{
-                fontSize: '0.72rem',
-                background: isBlocked
-                  ? 'rgba(244, 63, 94, 0.15)'
-                  : isEscalated
-                  ? 'rgba(245, 158, 11, 0.15)'
-                  : 'rgba(16, 185, 129, 0.15)',
-                color: isBlocked
-                  ? '#fb7185'
-                  : isEscalated
-                  ? '#fbbf24'
-                  : '#34d399',
-                border: `1px solid ${
-                  isBlocked
-                    ? 'rgba(244, 63, 94, 0.3)'
-                    : isEscalated
-                    ? 'rgba(245, 158, 11, 0.3)'
-                    : 'rgba(16, 185, 129, 0.3)'
-                }`,
-                padding: '2px 8px',
-                borderRadius: '6px',
-              }}
-            >
-              {code}
-            </span>
-          ))}
+      {proposal.policy_decision && (
+        <div className="proposal-card-policy">
+          <span>Policy decision</span>
+          <DecisionBadge decision={proposal.policy_decision.decision} showReasons={false} />
+          {reasons.length > 0 && (
+            <details className="proposal-card-reasons">
+              <summary>View reasons ({reasons.length})</summary>
+              <ul>{reasons.map((code, index) => <li key={`${code}-${index}`}>{humanizeEvent(code)}</li>)}</ul>
+            </details>
+          )}
         </div>
       )}
 
-      {/* Transaction Broadcast Link */}
       {proposal.transaction?.tx_hash && (
-        <div
-          style={{
-            background: 'rgba(0, 242, 254, 0.08)',
-            border: '1px solid rgba(0, 242, 254, 0.25)',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle size={15} color="var(--color-cyan)" />
-            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Broadcast to Sepolia:</span>
-            <span className="font-mono" style={{ fontSize: '0.8rem', color: '#fff' }}>
-              {proposal.transaction.tx_hash.slice(0, 16)}...
-            </span>
-          </div>
-          <a
-            href={`https://sepolia.etherscan.io/tx/${proposal.transaction.tx_hash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              color: 'var(--color-cyan)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.78rem',
-              textDecoration: 'none',
-              fontWeight: 600,
-            }}
-          >
-            <span>Etherscan</span>
-            <ExternalLink size={12} />
-          </a>
+        <div className="proposal-card-broadcast">
+          <span>{proposal.transaction.execution_mode === 'simulated' ? 'Simulated · not broadcast' : proposal.transaction.execution_mode === 'sepolia' ? ({ UNCERTAIN: 'Sepolia · outcome uncertain', CONFIRMED: 'Sepolia · confirmed (1 receipt, not finality)', REVERTED: 'Sepolia · reverted', SUBMITTED: 'Sepolia · submitted, awaiting receipt', SIGNED: 'Sepolia · signed, not confirmed', SIMULATED: 'Mode mismatch · do not submit' }[proposal.transaction.execution_outcome ?? 'SIGNED']) : 'Transaction · mode unverified'}: {proposal.transaction.tx_hash.slice(0, 12)}…</span>
+          {proposal.chain_id === 11155111 && proposal.transaction.execution_mode === 'sepolia' && (
+            <a href={`https://sepolia.etherscan.io/tx/${proposal.transaction.tx_hash}`}
+              target="_blank" rel="noopener noreferrer">
+              View on Etherscan <ExternalLink size={14} aria-hidden="true" />
+            </a>
+          )}
         </div>
       )}
 
-      {/* Error message */}
-      {actionError && (
-        <div
-          style={{
-            padding: '8px 12px',
-            borderRadius: '6px',
-            background: 'rgba(244, 63, 94, 0.1)',
-            border: '1px solid rgba(244, 63, 94, 0.3)',
-            color: '#fb7185',
-            fontSize: '0.8rem',
-          }}
-        >
-          {actionError}
-        </div>
-      )}
+      {actionError && <p className="proposal-card-error" role="alert">{actionError}</p>}
+      {proposal.auto_execution_enabled && proposal.auto_execution_max_wei &&
+        <details className="proposal-card-context">
+          <summary>Auto-execution limit: {weiToEth(proposal.auto_execution_max_wei)} ETH</summary>
+          <p>Further restricted by policy, allowlist, budget, and security checks.</p>
+        </details>}
+      {automatic && <p className="required-role-note" role="status">
+        Automatic execution has not completed. No payment is confirmed. Check the recipient
+        allowlist, current policy, and pending executions before reevaluating this proposal.
+      </p>}
 
-      {/* Actions Toolbar */}
-      <div
-        style={{
-          borderTop: '1px solid var(--border-light)',
-          paddingTop: '12px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '10px',
-        }}
-      >
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className="btn btn-outline"
-            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-            onClick={() => onOpenDetails(proposal)}
-          >
-            <FileText size={14} />
-            <span>Details</span>
+      {(isSignable || isResumable || proposal.status === 'PROPOSED') && <p className="required-role-note">{hasRequiredRole ? 'Evaluation and submission permissions verified.' : 'Requires Proposer, or Demo administrator in simulation. Connect it using Switch role.'}</p>}
+      <footer className="proposal-card-footer">
+        <div className="proposal-card-actions">
+          <button className="btn btn-outline" onClick={() => onOpenDetails(proposal)}>
+            <FileText size={15} aria-hidden="true" /> Details
           </button>
-
-          <button
-            className="btn btn-outline"
-            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-            onClick={() => onOpenAudit(proposal.correlation_id)}
-          >
-            <History size={14} />
-            <span>Audit Trail</span>
+          <button className="btn btn-outline" onClick={() => onOpenAudit(proposal.correlation_id)}>
+            <History size={15} aria-hidden="true" /> Audit trail
           </button>
         </div>
-
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {proposal.status === 'PROPOSED' && (
-            <button
-              className="btn btn-primary"
-              style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-              onClick={handleEvaluate}
-              disabled={evaluating}
-            >
-              <ShieldCheck size={14} />
-              <span>{evaluating ? 'Evaluating...' : 'Evaluate Policy'}</span>
+        <div className="proposal-card-actions">
+          {(proposal.status === 'PROPOSED' || automatic) && (
+            <button className="btn btn-primary" onClick={handleEvaluate} disabled={evaluating || !hasRequiredRole}>
+              <ShieldCheck size={15} aria-hidden="true" />
+              {evaluating ? 'Checking…' : automatic ? 'Recheck automatic execution' : 'Evaluate policy'}
             </button>
           )}
-
           {isSignable && (
-            <button
-              className="btn btn-emerald"
-              style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-              onClick={handleSign}
-              disabled={signing}
-            >
-              <Lock size={14} />
-              <span>{signing ? 'Signing with Isolated Key...' : 'Sign & Broadcast'}</span>
+            <button className="btn btn-primary" onClick={handleSign} disabled={signing || !hasRequiredRole}>
+              <Lock size={15} aria-hidden="true" />
+              {signing ? 'Signing…' : executionMode === 'simulated' ? 'Sign & simulate' : executionMode === 'sepolia' ? 'Sign & broadcast' : 'Sign & submit'}
             </button>
           )}
-
-          {isEscalated && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.8rem',
-                color: 'var(--color-amber)',
-                fontWeight: 600,
-              }}
-            >
-              <Clock size={14} />
-              <span>Pending Human Authorization</span>
-            </div>
+          {isResumable && (
+            <button className="btn btn-outline" onClick={handleSign} disabled={signing || !hasRequiredRole}>
+              {signing ? 'Reconciling…' : 'Reconcile & retry same transaction'}
+            </button>
           )}
-
+          {isEscalated && (
+            <span className="proposal-card-hold">
+              <Clock size={15} aria-hidden="true" /> Human approval required
+            </span>
+          )}
           {isBlocked && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '0.8rem',
-                color: 'var(--color-rose)',
-                fontWeight: 600,
-              }}
-            >
-              <Lock size={14} />
-              <span>Signing Prohibited by Security Policy</span>
-            </div>
+            <span className="proposal-card-blocked">
+              <Lock size={15} aria-hidden="true" /> Signing blocked by policy
+            </span>
           )}
         </div>
-      </div>
-    </div>
+      </footer>
+    </article>
   );
 };

@@ -42,6 +42,10 @@ export interface Approval {
 }
 
 export interface Transaction {
+  execution_outcome?: 'SIGNED' | 'SIMULATED' | 'UNCERTAIN' | 'SUBMITTED' | 'CONFIRMED' | 'REVERTED' | null;
+  receipt?: Record<string, unknown> | null;
+  explorer_url?: string | null;
+  execution_mode?: 'simulated' | 'sepolia' | null;
   id: string;
   tx_hash?: string | null;
   status: 'SIGNING' | 'SIGNED' | 'SUBMITTED' | 'CONFIRMED' | 'FAILED';
@@ -53,6 +57,8 @@ export interface Transaction {
 }
 
 export interface Proposal {
+  auto_execution_enabled?: boolean;
+  auto_execution_max_wei?: string;
   id: string;
   correlation_id: string;
   prompt: string;
@@ -120,6 +126,17 @@ export interface PendingApproval {
   };
 }
 
+export interface PromptReviewEvent {
+  id: string;
+  correlation_id: string;
+  event_type: 'PROMPT_SCREENING_REVIEW_REQUIRED';
+  status: 'REVIEW_REQUIRED';
+  review_type: 'PROMPT_SCREENING';
+  reason_code: string | null;
+  prompt_digest: string | null;
+  created_at: string;
+}
+
 export interface ApprovalDecisionPayload {
   decision: 'APPROVE' | 'REJECT';
   approved_by: string;
@@ -150,6 +167,10 @@ export interface AuditIntegrityVerification {
 }
 
 export interface BackendHealth {
+  execution_mode?: 'simulated' | 'sepolia';
+  verified_chain_id?: number | null;
+  verified_block_number?: number | null;
+  rpc_verified_at?: string | null;
   status: string;
   service: string;
   version: string;
@@ -162,6 +183,23 @@ export interface APIEnvelope<T> {
     total?: number;
     [key: string]: unknown;
   };
+}
+
+export interface EconomicCheckPayload {
+  value_wei: string;
+  estimated_gas: number;
+  gas_price_gwei: string;
+  max_gas_price_gwei: string;
+}
+
+export interface EconomicCheckResult extends EconomicCheckPayload {
+  advisory_only: true;
+  estimate_source: 'CALLER_SUPPLIED';
+  is_economically_viable: boolean;
+  gas_cost_wei: string;
+  gas_cost_eth: string;
+  gas_to_value_ratio: string | null;
+  warnings: string[];
 }
 
 export interface APIErrorDetails {

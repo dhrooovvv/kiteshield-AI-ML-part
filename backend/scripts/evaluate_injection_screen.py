@@ -15,13 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.ai_ml import InjectionLabel, InjectionScreen  # noqa: E402
-
 
 DATASET_PATH = PROJECT_ROOT / "app" / "ai_ml" / "evaluation_dataset_v1.jsonl"
 REQUIRED_FIELDS = {"id", "text", "label", "attack_category", "explanation"}
@@ -37,7 +35,7 @@ class Counts:
     true_negative: int = 0
     false_negative: int = 0
 
-    def add(self, *, actual_positive: bool, predicted_positive: bool) -> "Counts":
+    def add(self, *, actual_positive: bool, predicted_positive: bool) -> Counts:
         if actual_positive and predicted_positive:
             return Counts(
                 self.true_positive + 1,

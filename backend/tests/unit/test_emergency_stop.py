@@ -13,6 +13,7 @@ from app.services.blockchain import BlockchainService
 from app.services.capability import CapabilityService
 from app.services.emergency_stop import EmergencyStopService
 from app.services.signer import IsolatedSigner
+from tests.authorization_support import seed_authorization
 
 
 @pytest.fixture
@@ -83,6 +84,7 @@ async def test_existing_token_cannot_bypass_stop_at_signing(test_session, action
     )
     await test_session.flush()
     capability = CapabilityService()
+    await seed_authorization(test_session, action)
     token, _ = await capability.issue_token(test_session, action, policy_version=1)
     await EmergencyStopService().set_active(
         test_session, active=True, reason="incident", changed_by="admin"

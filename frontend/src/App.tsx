@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Header } from './components/Header.tsx';
 import { Navigation, type NavTab } from './components/Navigation.tsx';
 import { OverviewView } from './views/OverviewView.tsx';
@@ -9,8 +9,11 @@ import { AuditView } from './views/AuditView.tsx';
 import { ApprovalModal } from './components/ApprovalModal.tsx';
 import { AuditTrailModal } from './components/AuditTrailModal.tsx';
 import { ProposalDetailModal } from './components/ProposalDetailModal.tsx';
-import { api } from './api/client.ts';
-import type { BackendHealth, PendingApproval, Policy, Proposal } from './types/index.ts';
+import { KiteShieldAPIError, api } from './api/client.ts';
+import type { BackendHealth, PendingApproval, Policy, Proposal, PromptReviewEvent } from './types/index.ts';
+import { countHumanAttentionItems } from './dashboardMetrics.ts';
+import { refreshPaymentReceipts } from './paymentReceipts.ts';
+import { PortfolioView } from './views/PortfolioView.tsx';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
@@ -18,57 +21,86 @@ export const App: React.FC = () => {
   const [activePolicy, setActivePolicy] = useState<Policy | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
+  const [promptReviews, setPromptReviews] = useState<PromptReviewEvent[]>([]);
+  const [blockedCount, setBlockedCount] = useState<number | undefined>(undefined);
+  const [promptReviewsError, setPromptReviewsError] = useState<string | null>(null);
+  const [pendingApprovalsError, setPendingApprovalsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const [portfolioRefreshRevision, setPortfolioRefreshRevision] = useState(0);
+  const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+  const refreshInFlight = useRef(false);
+  const refreshRequested = useRef(false);
 
   // Modal states
   const [selectedApproval, setSelectedApproval] = useState<PendingApproval | null>(null);
   const [selectedAuditCid, setSelectedAuditCid] = useState<string | null>(null);
   const [selectedProposalForDetails, setSelectedProposalForDetails] = useState<Proposal | null>(null);
 
-  const fetchAllData = useCallback(async () => {
+  const fetchAllData = useCallback(async function refreshData() {
+    if (refreshInFlight.current) {
+      refreshRequested.current = true;
+      return;
+    }
+    refreshInFlight.current = true;
     setLoading(true);
     setGlobalError(null);
-
     try {
-      // 1. Health
-      try {
-        const h = await api.checkHealth();
-        setHealth(h);
-      } catch {
-        setHealth(null);
+      const [healthResult, policyResult, proposalResult, approvalResult, reviewResult, countsResult] = await Promise.allSettled([
+        api.checkHealth(), api.getActivePolicy(), api.listProposals(undefined, 50, 0),
+        api.listPendingApprovals(), api.listPromptScreeningReviews(),
+        api.getScreeningCounts(),
+      ]);
+      const failures: string[] = [];
+      if (countsResult.status === 'fulfilled') setBlockedCount(countsResult.value.blocked_count);
+      else failures.push('Blocked-attempt count');
+      setHealth(healthResult.status === 'fulfilled' ? healthResult.value : null);
+      if (healthResult.status === 'rejected') failures.push('Service status');
+      if (policyResult.status === 'fulfilled') setActivePolicy(policyResult.value);
+      else if (policyResult.reason instanceof KiteShieldAPIError && policyResult.reason.status === 404) setActivePolicy(null);
+      else failures.push('Active policy');
+      if (proposalResult.status === 'fulfilled') {
+        const receipts = await refreshPaymentReceipts(
+          proposalResult.value.proposals, (id) => api.getTransaction(id),
+        );
+        setProposals(receipts.proposals);
+        if (receipts.failed) failures.push('Transaction receipts (confirmation not verified)');
       }
-
-      // 2. Active Policy
-      try {
-        const pol = await api.getActivePolicy();
-        setActivePolicy(pol);
-      } catch {
-        setActivePolicy(null);
+      else failures.push('Proposals');
+      if (approvalResult.status === 'fulfilled') {
+        setPendingApprovals(approvalResult.value);
+        setPendingApprovalsError(null);
+      } else {
+        setPendingApprovalsError('Transaction approvals could not be refreshed. Retry or check your API key.');
+        failures.push('Transaction approvals');
       }
-
-      // 3. Proposals
-      try {
-        const propRes = await api.listProposals(undefined, 50, 0);
-        setProposals(propRes.proposals);
-      } catch (err: unknown) {
-        console.warn('Failed to load proposals', err);
+      if (reviewResult.status === 'fulfilled') {
+        setPromptReviews(reviewResult.value);
+        setPromptReviewsError(null);
+      } else {
+        setPromptReviewsError('Prompt reviews could not be refreshed. Retry or check your API key.');
+        failures.push('Prompt reviews');
       }
-
-      // 4. Pending Approvals
-      try {
-        const apps = await api.listPendingApprovals();
-        setPendingApprovals(apps);
-      } catch (err: unknown) {
-        console.warn('Failed to load pending approvals', err);
-      }
-    } catch (err: unknown) {
-      setGlobalError(err instanceof Error ? err.message : 'Error fetching backend state');
+      const authenticationFailed = [policyResult, proposalResult, approvalResult, reviewResult, countsResult].some(
+        (result) => result.status === 'rejected' && result.reason instanceof KiteShieldAPIError && result.reason.status === 401
+      );
+      setGlobalError(authenticationFailed
+        ? 'The backend is reachable, but authentication failed. Open API key and verify the credential for its matching role. Keys and verified roles are cleared when the page reloads.'
+        : failures.length ? 'Could not refresh: ' + failures.join(', ') + '. Previously loaded data may be out of date. Check your connection and API key, then retry.' : null);
+      if (!failures.length) setLastRefreshed(new Date().toLocaleTimeString());
+      setRefreshRevision((value) => value + 1);
     } finally {
+      refreshInFlight.current = false;
       setLoading(false);
+      if (refreshRequested.current) {
+        refreshRequested.current = false;
+        queueMicrotask(() => { void refreshData(); });
+      }
     }
   }, []);
-
+  useEffect(() => api.subscribeScreeningEvents(() => { void fetchAllData(); }), [fetchAllData]);
   useEffect(() => {
     let isMounted = true;
     queueMicrotask(() => {
@@ -89,6 +121,10 @@ export const App: React.FC = () => {
   }, [fetchAllData]);
 
   // Handlers for state updates
+  const handleManualRefresh = () => {
+    setPortfolioRefreshRevision(value => value + 1);
+    void fetchAllData();
+  };
   const handleProposalCreated = (newProp: Proposal) => {
     setProposals((prev) => [newProp, ...prev]);
     fetchAllData();
@@ -104,18 +140,19 @@ export const App: React.FC = () => {
     fetchAllData();
   };
 
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Top Header */}
-      <Header health={health} onRefreshAll={fetchAllData} loading={loading} />
+  const humanAttentionCount = countHumanAttentionItems(pendingApprovals, promptReviews);
 
-      {/* Main Navigation */}
+  return (
+    <div className="app-shell">
       <Navigation
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         pendingApprovalsCount={pendingApprovals.length}
+        promptReviewsCount={humanAttentionCount - pendingApprovals.length}
         totalProposalsCount={proposals.length}
       />
+      <div className="app-main">
+        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} />
 
       {/* Global error banner if backend is unreachable */}
       {globalError && (
@@ -126,7 +163,7 @@ export const App: React.FC = () => {
             width: 'calc(100% - 48px)',
             background: 'rgba(244, 63, 94, 0.15)',
             border: '1px solid rgba(244, 63, 94, 0.4)',
-            color: '#fb7185',
+            color: 'var(--color-rose)',
             padding: '12px 18px',
             borderRadius: '10px',
             fontSize: '0.85rem',
@@ -143,14 +180,16 @@ export const App: React.FC = () => {
       )}
 
       {/* Main Content View Container */}
-      <main style={{ maxWidth: '1440px', width: '100%', margin: '0 auto', padding: '28px 24px', flex: 1 }}>
+      <main className="content-shell">
+        {currentTab !== 'portfolio' && currentTab !== 'approvals' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
         {currentTab === 'overview' && (
           <OverviewView
+            blockedAttemptsCount={blockedCount}
             proposals={proposals}
             activePolicy={activePolicy}
             pendingApprovals={pendingApprovals}
+            promptReviews={promptReviews}
             onProposalCreated={handleProposalCreated}
-            onProposalUpdated={handleProposalUpdated}
             onPolicyUpdated={handlePolicyUpdated}
             onOpenAudit={(cid) => setSelectedAuditCid(cid)}
             onOpenDetails={(p) => setSelectedProposalForDetails(p)}
@@ -161,6 +200,7 @@ export const App: React.FC = () => {
 
         {currentTab === 'proposals' && (
           <ProposalsView
+            executionMode={health?.execution_mode}
             proposals={proposals}
             onProposalCreated={handleProposalCreated}
             onProposalUpdated={handleProposalUpdated}
@@ -172,7 +212,12 @@ export const App: React.FC = () => {
         {currentTab === 'approvals' && (
           <ApprovalsView
             pendingApprovals={pendingApprovals}
+            promptReviews={promptReviews}
+            pendingApprovalsError={pendingApprovalsError}
+            promptReviewsError={promptReviewsError}
             onSelectApproval={(a) => setSelectedApproval(a)}
+            onOpenAudit={setSelectedAuditCid}
+            loading={loading}
           />
         )}
 
@@ -180,10 +225,12 @@ export const App: React.FC = () => {
           <PoliciesView
             activePolicy={activePolicy}
             onPolicyUpdated={handlePolicyUpdated}
+            refreshRevision={refreshRevision}
           />
         )}
 
-        {currentTab === 'audit' && <AuditView />}
+        {currentTab === 'audit' && <AuditView refreshRevision={refreshRevision} />}
+        {currentTab === 'portfolio' && <PortfolioView refreshRevision={portfolioRefreshRevision} />}
       </main>
 
       {/* Modals */}
@@ -211,18 +258,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Footer */}
-      <footer
-        style={{
-          borderTop: '1px solid var(--border-light)',
-          padding: '16px 24px',
-          textAlign: 'center',
-          fontSize: '0.8rem',
-          color: 'var(--text-dim)',
-          background: 'rgba(8, 12, 20, 0.6)',
-        }}
-      >
-        KiteShield Wallet &bull; Constrained AI Agent Authorization &bull; Sepolia Testnet &bull; Competition MVP
-      </footer>
+      </div>
     </div>
   );
 };

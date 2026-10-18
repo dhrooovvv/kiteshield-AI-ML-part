@@ -12,6 +12,7 @@ Verifies:
 import jwt
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.exceptions import (
@@ -23,6 +24,7 @@ from app.models import Policy
 from app.schemas import NormalizedAction
 from app.services.capability import _AUDIENCE, _ISSUER, CapabilityService
 from app.services.signer import IsolatedSigner
+from tests.authorization_support import seed_authorization
 
 
 @pytest.fixture
@@ -47,7 +49,7 @@ def test_action():
 
 
 @pytest_asyncio.fixture
-async def seeded_session(test_session):
+async def seeded_session(test_session, test_action):
     """Session with an active policy."""
     policy = Policy(
         id="test-policy-id",
@@ -57,6 +59,7 @@ async def seeded_session(test_session):
     )
     test_session.add(policy)
     await test_session.flush()
+    await seed_authorization(test_session, test_action)
     return test_session
 
 
@@ -180,22 +183,17 @@ class TestStalePolicy:
     @pytest.mark.asyncio
     async def test_reject_deactivated_policy(self, signer, cap_service, test_action, test_session):
         """Token issued under policy v1, but v1 is now inactive → REJECTED."""
-        # Create inactive policy
-        policy = Policy(
-            id="inactive-policy",
-            version=99,
-            max_amount_wei="1000000000000000000",
-            is_active=False,  # DEACTIVATED
-        )
-        test_session.add(policy)
-        await test_session.flush()
+        await seed_authorization(test_session, test_action)
 
         # Issue token referencing policy v99
         token, _ = await cap_service.issue_token(
             session=test_session,
             action=test_action,
-            policy_version=99,
+            policy_version=1,
         )
+        policy = await test_session.scalar(select(Policy).where(Policy.version == 1))
+        policy.is_active = False
+        await test_session.flush()
 
         with pytest.raises(SigningRejectedError, match="[Pp]olicy"):
             await signer.sign_transaction(

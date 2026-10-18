@@ -155,8 +155,29 @@ def decide(
         attack = horizon.predicted_attack
         reason = "models_agree_positive" if attack else "models_agree_negative"
     elif strategy == "three_layer_or":
-        attack = horizon.predicted_attack or bastion.predicted_attack or rules.predicted_attack
-        reason = "any_detector_positive" if attack else "all_negative"
+        if rules.predicted_attack:
+            attack = True
+            reason = "rules_positive"
+        elif horizon.predicted_attack and bastion.predicted_attack:
+            attack = True
+            reason = "both_models_positive"
+        elif horizon.predicted_attack or bastion.predicted_attack:
+            return ExperimentalDecision(
+                strategy=strategy,
+                classification=ExperimentalClassification.REVIEW,
+                risk_tier=RiskTier.REVIEW,
+                reason_code="model_disagreement",
+                recommended_next_step="escalate_for_review",
+                horizon_prediction=horizon.predicted_attack,
+                bastion_prediction=bastion.predicted_attack,
+                rules_prediction=rules.predicted_attack,
+                model_agreement=False,
+                fallback_used=False,
+                detector_versions=versions,
+            )
+        else:
+            attack = False
+            reason = "all_negative"
     elif strategy == "horizon_threshold_bastion":
         attack = horizon.predicted_attack or bastion.predicted_attack
         reason = "horizon_threshold_or_bastion" if attack else "both_negative"

@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.exceptions import ValidationError
 from app.schemas import AgentProposalRequest, AssetType, validate_eth_address
+from app.services.amounts import eth_to_wei
 
 logger = get_logger("agent")
 
@@ -25,7 +26,7 @@ class LLMProposalOutput(BaseModel):
     """Schema enforced on the LLM structured output."""
 
     recipient: str = Field(..., description="Destination Ethereum address (0x format)")
-    amount_eth: float = Field(..., gt=0, description="Amount of ETH to transfer")
+    amount_eth: str = Field(..., description="Exact positive decimal ETH string, not a number")
     explanation: str = Field(..., description="Agent reasoning or summary of the action")
 
 
@@ -45,21 +46,20 @@ class AgentService:
         Uses OpenAI structured output if an API key is present.
         Falls back to local rule-based parsing if no API key is set.
         """
-        logger.info(
-            "Agent processing prompt: '%s'", prompt[:80] + ("..." if len(prompt) > 80 else "")
-        )
-
+        # Require explicit, unambiguous intent even when an LLM is configured.
+        expected = self._parse_with_rules(prompt)
         if self._api_key and len(self._api_key.strip()) > 5:
             try:
-                return await self._call_openai_structured(prompt)
-            except Exception as e:
-                logger.warning(
-                    "OpenAI structured output failed: %s. Falling back to local parser.", e
-                )
-                return self._parse_with_rules(prompt)
-        else:
-            logger.info("No OpenAI API key configured. Using deterministic local parser.")
-            return self._parse_with_rules(prompt)
+                extracted = await self._call_openai_structured(prompt)
+            except Exception as exc:
+                raise ValidationError("Transaction extraction failed; no proposal created") from exc
+            if (extracted.recipient.lower(), extracted.amount_wei) != (
+                expected.recipient.lower(),
+                expected.amount_wei,
+            ):
+                raise ValidationError("Model extraction conflicts with explicit payment intent")
+            return extracted
+        return expected
 
     async def _call_openai_structured(self, prompt: str) -> AgentProposalRequest:
         """Call OpenAI API using structured output."""
@@ -67,7 +67,7 @@ class AgentService:
 
         client = AsyncOpenAI(api_key=self._api_key)
         response = await client.beta.chat.completions.parse(
-            model="gpt-4o",
+            model=get_settings().openai_model,
             messages=[
                 {
                     "role": "system",
@@ -90,7 +90,7 @@ class AgentService:
             raise ValidationError("Agent failed to parse structured output from model")
 
         # Convert ETH float to exact wei integer string
-        amount_wei = str(int(round(parsed.amount_eth * 10**18)))
+        amount_wei = eth_to_wei(parsed.amount_eth)
         checksummed_recipient = validate_eth_address(parsed.recipient)
 
         return AgentProposalRequest(
@@ -103,35 +103,11 @@ class AgentService:
 
     def _parse_with_rules(self, prompt: str) -> AgentProposalRequest:
         """Deterministic regex-based extraction for offline, mock, and test environments."""
-        # Find Ethereum address: 0x followed by 40 hex chars
-        addr_match = re.search(r"0x[a-fA-F0-9]{40}", prompt)
-        if not addr_match:
-            raise ValidationError(
-                "Could not identify a valid Ethereum destination address in prompt.",
-                details={"prompt": prompt},
-            )
-        raw_address = addr_match.group(0)
-        recipient = validate_eth_address(raw_address)
-
-        # Find amount: patterns like '0.05 eth', '1.5 ether', '1000 wei', '0.01'
-        eth_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:eth|ether)", prompt, re.IGNORECASE)
-        wei_match = re.search(r"(\d+)\s*wei", prompt, re.IGNORECASE)
-
-        if eth_match:
-            eth_val = float(eth_match.group(1))
-            amount_wei = str(int(round(eth_val * 10**18)))
-        elif wei_match:
-            amount_wei = str(int(wei_match.group(1)))
-        else:
-            # Fallback: look for generic decimal number
-            num_match = re.search(r"\b(\d+(?:\.\d+)?)\b", prompt)
-            if num_match:
-                eth_val = float(num_match.group(1))
-                amount_wei = str(int(round(eth_val * 10**18)))
-            else:
-                # Default minimal proposal amount (0.01 ETH)
-                amount_wei = str(10_000_000_000_000_000)
-
+        addresses = re.findall(r"0x[a-fA-F0-9]{40}(?![a-fA-F0-9])", prompt)
+        if len(addresses) != 1:
+            raise ValidationError("Specify exactly one complete recipient address")
+        recipient = validate_eth_address(addresses[0])
+        amount_wei = self.extract_explicit_amount(prompt)
         return AgentProposalRequest(
             prompt=prompt,
             recipient=recipient,
@@ -139,3 +115,35 @@ class AgentService:
             chain_id=11155111,
             asset_type=AssetType.NATIVE_ETH,
         )
+
+    @staticmethod
+    def extract_explicit_amount(prompt: str) -> str:
+        if re.search(
+            r"[-−–]\s*(?:\d|\.)|\b(?:negative|approximately|about|between|up to)\b",
+            prompt,
+            re.IGNORECASE,
+        ):
+            raise ValidationError(
+                "Approximate, ranged, or negative amounts are not executable intent"
+            )
+
+        pattern = r"(?<![\w.,])([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(ether|eth|wei)\b"
+        amounts = re.findall(
+            r"(?<![\w.,])([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(ether|eth|wei)\b",
+            prompt,
+            re.IGNORECASE,
+        )
+        if len(amounts) != 1:
+            raise ValidationError("Specify exactly one explicit ETH or wei amount")
+        remaining = re.sub(pattern, "", prompt, flags=re.IGNORECASE)
+        remaining = re.sub(r"0x[a-fA-F0-9]{40}", "", remaining)
+        if re.search(r"(?<!\w)(?:\d|\.\d)", remaining):
+            raise ValidationError("Additional numbers make this payment intent ambiguous")
+        value, unit = amounts[0]
+        if unit.lower() == "wei":
+            if not re.fullmatch(r"[0-9]+", value) or not 0 < int(value) <= 10**24:
+                raise ValidationError("Wei must be a positive integer within the supported limit")
+            amount_wei = str(int(value))
+        else:
+            amount_wei = eth_to_wei(value)
+        return amount_wei

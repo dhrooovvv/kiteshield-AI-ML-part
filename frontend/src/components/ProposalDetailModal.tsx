@@ -1,7 +1,9 @@
-import React from 'react';
-import { FileText, X } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DecisionBadge } from './DecisionBadge.tsx';
 import { StatusBadge } from './StatusBadge.tsx';
+import { FeeCheck } from './FeeCheck.tsx';
+import { humanizeEvent } from '../auditPresentation.ts';
 import type { Proposal } from '../types/index.ts';
 
 interface ProposalDetailModalProps {
@@ -10,203 +12,89 @@ interface ProposalDetailModalProps {
   onOpenAudit: (correlationId: string) => void;
 }
 
+const tabs = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'fees', label: 'Fee estimate' },
+  { id: 'policy', label: 'Policy & history' },
+] as const;
+type DetailTab = typeof tabs[number]['id'];
+
 export const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({
-  proposal,
-  onClose,
-  onOpenAudit,
+  proposal, onClose, onOpenAudit,
 }) => {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.8)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '16px',
-      }}
-    >
-      <div
-        className="glass-panel"
-        style={{
-          width: '100%',
-          maxWidth: '680px',
-          maxHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '24px',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: 'rgba(59, 130, 246, 0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
-              }}
-            >
-              <FileText size={20} color="var(--color-blue)" />
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 600 }}>Proposal Inspection</h3>
-              <p className="font-mono" style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                UUID: {proposal.id}
-              </p>
-            </div>
-          </div>
+  const [activeTab, setActiveTab] = useState<DetailTab>('summary');
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const id = useId();
 
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-dim)',
-              cursor: 'pointer',
-              padding: '4px',
-            }}
-          >
-            <X size={20} />
-          </button>
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    dialogRef.current?.showModal();
+    return () => { if (previousFocus instanceof HTMLElement) previousFocus.focus(); };
+  }, []);
+
+  return createPortal(
+    <dialog ref={dialogRef} className="proposal-dialog" aria-labelledby={id + '-title'} onCancel={onClose}>
+      <header className="proposal-dialog-header">
+        <div>
+          <h2 id={id + '-title'}>Proposal details</h2>
+          <p>#{proposal.id.slice(0, 8)} · {new Date(proposal.created_at).toLocaleString()}</p>
         </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Status & Decision header */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'var(--bg-subtle)',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              border: '1px solid var(--border-light)',
-            }}
-          >
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block' }}>Lifecycle Status</span>
-              <StatusBadge status={proposal.status} />
-            </div>
-            <div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block' }}>Policy Decision</span>
-              <DecisionBadge decision={proposal.policy_decision?.decision} />
-            </div>
-          </div>
-
-          {/* Action Parameters */}
-          <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-light)' }}>
-            <h4 style={{ fontSize: '0.85rem', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600 }}>
-              Transaction Parameters
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '0.85rem' }}>
-              <div>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Amount in ETH</span>
-                <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>{proposal.amount_eth} ETH</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Amount in Wei (Exact Integer)</span>
-                <span className="font-mono" style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{proposal.amount_wei}</span>
-              </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Recipient Address</span>
-                <span className="font-mono" style={{ color: 'var(--color-cyan)', fontSize: '0.82rem', wordBreak: 'break-all' }}>
-                  {proposal.recipient}
-                </span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Target Chain ID</span>
-                <span style={{ color: 'var(--text-muted)' }}>{proposal.chain_id} (Sepolia)</span>
-              </div>
-              <div>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Asset Type</span>
-                <span style={{ color: 'var(--text-muted)' }}>{proposal.asset_type}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Agent Prompt */}
-          <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>
-              Original Agent Natural Language Prompt
-            </span>
-            <p style={{ fontSize: '0.88rem', color: '#e2e8f0' }}>&ldquo;{proposal.prompt}&rdquo;</p>
-          </div>
-
-          {/* Policy Evaluation Details */}
-          {proposal.policy_decision && (
-            <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>
-                Policy Evaluation (Version {proposal.policy_decision.policy_version})
-              </span>
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                {proposal.policy_decision.reason_codes.map((code, idx) => (
-                  <span
-                    key={idx}
-                    className="font-mono"
-                    style={{
-                      fontSize: '0.75rem',
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      color: 'var(--color-cyan)',
-                    }}
-                  >
-                    {code}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Transaction on-chain */}
-          {proposal.transaction && (
-            <div style={{ background: 'var(--bg-subtle)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>
-                On-Chain Broadcast Details
-              </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem' }}>
-                <div>
-                  <span style={{ color: 'var(--text-dim)' }}>Tx Hash: </span>
-                  <span className="font-mono" style={{ color: 'var(--color-cyan)' }}>
-                    {proposal.transaction.tx_hash || 'Pending'}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ color: 'var(--text-dim)' }}>Status: </span>
-                  <span style={{ color: '#fff', fontWeight: 600 }}>{proposal.transaction.status}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '16px', marginTop: '16px', display: 'flex', justifyContent: 'space-between' }}>
-          <button
-            className="btn btn-outline"
-            onClick={() => {
-              onClose();
-              onOpenAudit(proposal.correlation_id);
-            }}
-          >
-            Open Audit Trail
-          </button>
-          <button className="btn btn-primary" onClick={onClose}>
-            Close
-          </button>
-        </div>
+        <button className="btn btn-outline" onClick={onClose}>Close</button>
+      </header>
+      <div className="proposal-dialog-status">
+        <div><span>Status</span><StatusBadge status={proposal.status} /></div>
+        <div><span>Policy decision</span><DecisionBadge decision={proposal.policy_decision?.decision} /></div>
       </div>
-    </div>
+      <div className="proposal-dialog-tabs" role="tablist" aria-label="Proposal details">
+        {tabs.map((tab, index) => <button key={tab.id} ref={(element) => { tabRefs.current[index] = element; }}
+          type="button" role="tab" id={id + '-tab-' + tab.id} aria-controls={id + '-panel-' + tab.id}
+          aria-selected={activeTab === tab.id} tabIndex={activeTab === tab.id ? 0 : -1}
+          onClick={() => setActiveTab(tab.id)}
+          onKeyDown={(event) => {
+            let nextIndex = index;
+            if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+            else if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
+            else if (event.key === 'Home') nextIndex = 0;
+            else if (event.key === 'End') nextIndex = tabs.length - 1;
+            else return;
+            event.preventDefault();
+            setActiveTab(tabs[nextIndex].id);
+            tabRefs.current[nextIndex]?.focus();
+          }}>{tab.label}</button>)}
+      </div>
+      <div className="proposal-dialog-content">
+        <section role="tabpanel" id={id + '-panel-summary'} aria-labelledby={id + '-tab-summary'} hidden={activeTab !== 'summary'} tabIndex={0}>
+          <dl className="proposal-summary">
+            <div><dt>Transfer amount</dt><dd className="proposal-summary-amount">{proposal.amount_eth} ETH</dd></div>
+            <div><dt>Network</dt><dd>{proposal.chain_id === 11155111 ? 'Sepolia' : 'Chain ' + proposal.chain_id} <span className="proposal-muted">({proposal.chain_id})</span></dd></div>
+            <div className="proposal-summary-wide"><dt>Recipient</dt><dd>{proposal.recipient}</dd></div>
+            <div><dt>Exact amount (wei)</dt><dd>{proposal.amount_wei}</dd></div>
+            <div><dt>Asset</dt><dd>{proposal.asset_type === 'NATIVE_ETH' ? 'Native ETH' : proposal.asset_type}</dd></div>
+          </dl>
+          <div className="proposal-source"><h3>Original request</h3><p>{proposal.prompt || 'No original request recorded.'}</p></div>
+        </section>
+        <section role="tabpanel" id={id + '-panel-fees'} aria-labelledby={id + '-tab-fees'} hidden={activeTab !== 'fees'} tabIndex={0}>
+          <FeeCheck key={proposal.id + ':' + proposal.amount_wei} valueWei={proposal.amount_wei} />
+        </section>
+        <section role="tabpanel" id={id + '-panel-policy'} aria-labelledby={id + '-tab-policy'} hidden={activeTab !== 'policy'} tabIndex={0}>
+          {proposal.policy_decision ? <div className="proposal-policy">
+            <h3>Policy version {proposal.policy_decision.policy_version}</h3>
+            <ul>{proposal.policy_decision.reason_codes.map((code, index) => <li key={index}>{humanizeEvent(code)}</li>)}</ul>
+            <p className="proposal-muted">Evaluated {new Date(proposal.policy_decision.evaluated_at).toLocaleString()}</p>
+          </div> : <p>This proposal has not been evaluated against a policy.</p>}
+          {proposal.approval && <div className="proposal-source">
+            <h3>Human approval</h3><dl className="audit-facts"><dt>Status</dt><dd>{humanizeEvent(proposal.approval.status)}</dd><dt>Expires</dt><dd>{new Date(proposal.approval.expires_at).toLocaleString()}</dd></dl>
+          </div>}
+          {proposal.transaction && <div className="proposal-source">
+            <h3>Transaction</h3><dl className="audit-facts"><dt>Status</dt><dd>{humanizeEvent(proposal.transaction.status)}</dd><dt>Transaction hash</dt><dd>{proposal.transaction.tx_hash || 'Not broadcast'}</dd></dl>
+          </div>}
+          <details className="proposal-source"><summary>Technical references</summary><dl className="audit-facts"><dt>Proposal ID</dt><dd>{proposal.id}</dd><dt>Request reference</dt><dd>{proposal.correlation_id}</dd></dl></details>
+        </section>
+      </div>
+      <footer className="proposal-dialog-footer">
+        <button className="btn btn-outline" onClick={() => { onClose(); onOpenAudit(proposal.correlation_id); }}>View audit trail</button>
+      </footer>
+    </dialog>, document.body
   );
 };

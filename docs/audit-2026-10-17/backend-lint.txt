@@ -1,0 +1,5 @@
+scripts/evaluate_injection_screen.py:8:1: I001 [*] Import block is un-sorted or un-formatted
+scripts/evaluate_injection_screen.py:23:1: I001 [*] Import block is un-sorted or un-formatted
+scripts/evaluate_injection_screen.py:40:74: UP037 [*] Remove quotes from type annotation
+Found 3 errors.
+[*] 3 fixable with `--fix`.
