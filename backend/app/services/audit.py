@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -43,6 +44,10 @@ _FORBIDDEN_FIELDS = frozenset(
         "secret",
         "capability_token_secret",
         "api_key",
+        "approver_api_key",
+        "policy_admin_api_key",
+        "demo_admin_api_key",
+        "emergency_stop_admin_api_key",
         "openai_api_key",
         "password",
         "seed_phrase",
@@ -101,6 +106,7 @@ class AuditService:
         actor: str,
         details: dict[str, Any],
         policy_version: int | None = None,
+        review_dedupe_key: str | None = None,
     ) -> AuditEvent:
         """Record a new audit event.
 
@@ -145,6 +151,7 @@ class AuditService:
             previous_hash=previous_hash,
             event_hash=event_hash,
             created_at=now,
+            review_dedupe_key=review_dedupe_key,
         )
         session.add(event)
         await session.flush()
@@ -156,6 +163,55 @@ class AuditService:
             actor,
         )
         return event
+
+    async def record_prompt_screening_review(
+        self,
+        session: AsyncSession,
+        correlation_id: str,
+        prompt_digest: str,
+        reason_code: str,
+        detector_versions: tuple[tuple[str, str | None], ...],
+    ) -> AuditEvent:
+        """Persist a deduplicated prompt-screening review event.
+
+        The raw prompt is intentionally excluded. Callers must commit this
+        event before returning the expected review response because the
+        rejected proposal request is otherwise expected to roll back.
+        """
+        result = await session.execute(
+            select(AuditEvent)
+            .where(AuditEvent.event_type == "PROMPT_SCREENING_REVIEW_REQUIRED")
+            .order_by(*_REVERSE_CHRONOLOGICAL_ORDER)
+        )
+        for event in result.scalars().all():
+            details = json.loads(event.details) if isinstance(event.details, str) else event.details
+            if details.get("prompt_digest") == prompt_digest:
+                return event
+
+        try:
+            return await self.record_event(
+                session=session,
+                event_type="PROMPT_SCREENING_REVIEW_REQUIRED",
+                correlation_id=correlation_id,
+                actor="prompt_screening",
+                details={
+                    "status": "REVIEW_REQUIRED",
+                    "review_type": "PROMPT_SCREENING",
+                    "prompt_digest": prompt_digest,
+                    "reason_code": reason_code,
+                    "detector_versions": detector_versions,
+                },
+                review_dedupe_key=prompt_digest,
+            )
+        except IntegrityError:
+            await session.rollback()
+            existing = await session.execute(
+                select(AuditEvent).where(AuditEvent.review_dedupe_key == prompt_digest)
+            )
+            event = existing.scalar_one_or_none()
+            if event is None:
+                raise
+            return event
 
     async def get_events_by_correlation(
         self,

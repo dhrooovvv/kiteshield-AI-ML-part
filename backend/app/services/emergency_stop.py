@@ -29,7 +29,9 @@ class EmergencyStopService:
     async def read_state(self, session: AsyncSession) -> EmergencyStopState:
         try:
             state = await session.scalar(
-                select(ExecutionControl).where(ExecutionControl.id == _GLOBAL_CONTROL_ID)
+                select(ExecutionControl)
+                .where(ExecutionControl.id == _GLOBAL_CONTROL_ID)
+                .execution_options(populate_existing=True)
             )
         except SQLAlchemyError as exc:
             raise EmergencyStopUnavailableError(
@@ -64,7 +66,10 @@ class EmergencyStopService:
         reason: str,
         changed_by: str,
     ) -> EmergencyStopState:
+        from app.services.execution_lock import lock_execution
+
         try:
+            await lock_execution(session)
             state = await session.scalar(
                 select(ExecutionControl)
                 .where(ExecutionControl.id == _GLOBAL_CONTROL_ID)

@@ -1,0 +1,117 @@
+[
+  {
+    "proposal_id": "b5d9d642-3fe4-44de-b589-2ff4d058f892",
+    "correlation_id": "demo-payment1-authorized-2026-10-18-33wei",
+    "sender": "0x3807fc9c3a8adf2d465290bbf06ae769dd08ada7",
+    "recipient": "0x229D5588641f2614e3F486c853D8BA0eC5FFe811",
+    "amount_wei": "10000000000000",
+    "chain_id": 11155111,
+    "proposal_status": "CONFIRMED",
+    "policy_version": 6,
+    "policy_decision_id": "ffe5d294-e15e-4a33-9c73-5692ceba0125",
+    "execution_id": "80eb22c6-e7bd-44ea-a776-6bc0b0bc14ea",
+    "approval_id": null,
+    "nonce": 0,
+    "authorized_envelope": {
+      "chainId": 11155111,
+      "gas": 248870,
+      "maxFeePerGas": 33,
+      "maxPriorityFeePerGas": 1,
+      "nonce": 0,
+      "to": "0x229D5588641f2614e3F486c853D8BA0eC5FFe811",
+      "type": 2,
+      "value": 10000000000000
+    },
+    "transaction": {
+      "id": "0ad13ad5-81fa-4498-905d-66842326d99f",
+      "tx_hash": "0x02437c8d60cfc3ecd3eab9406437ce948b3474a58a3e833d7483d1bcefd8faaa",
+      "status": "CONFIRMED",
+      "execution_mode": "sepolia",
+      "execution_outcome": "CONFIRMED",
+      "receipt": {
+        "blockHash": "0x47b59f963c5e59eca06ea48a58ab8b93bf58bf1d5f8359fa0b7eaa3e86bd576e",
+        "blockNumber": 11938916,
+        "contractAddress": null,
+        "cumulativeGasUsed": 60084045,
+        "effectiveGasPrice": 17,
+        "from": "0x3807fc9c3A8adF2d465290bbf06AE769DD08Ada7",
+        "gasUsed": 204600,
+        "logs": [
+          {
+            "address": "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE",
+            "blockHash": "0x47b59f963c5e59eca06ea48a58ab8b93bf58bf1d5f8359fa0b7eaa3e86bd576e",
+            "blockNumber": 11938916,
+            "blockTimestamp": "0x6ad45514",
+            "data": "0x000000000000000000000000000000000000000000000000000009184e72a000",
+            "logIndex": 210,
+            "removed": false,
+            "topics": [
+              "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+              "0x0000000000000000000000003807fc9c3a8adf2d465290bbf06ae769dd08ada7",
+              "0x000000000000000000000000229d5588641f2614e3f486c853d8ba0ec5ffe811"
+            ],
+            "transactionHash": "0x02437c8d60cfc3ecd3eab9406437ce948b3474a58a3e833d7483d1bcefd8faaa",
+            "transactionIndex": 91
+          }
+        ],
+        "logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000002000000000000000000000000002000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000008000020000000000000000000000000000000000000400000000200000000002000000000000000200000000000000000000000000000",
+        "status": 1,
+        "to": "0x229D5588641f2614e3F486c853D8BA0eC5FFe811",
+        "transactionHash": "0x02437c8d60cfc3ecd3eab9406437ce948b3474a58a3e833d7483d1bcefd8faaa",
+        "transactionIndex": 91,
+        "type": 2
+      },
+      "explorer_url": "https://sepolia.etherscan.io/tx/0x02437c8d60cfc3ecd3eab9406437ce948b3474a58a3e833d7483d1bcefd8faaa",
+      "block_number": 11938916,
+      "gas_used": 204600,
+      "error_message": null,
+      "created_at": "2026-10-18T05:11:14.566103+00:00",
+      "updated_at": "2026-10-18T05:11:49.946921+00:00"
+    },
+    "audit_references": [
+      {
+        "id": "e6f457b9-4714-4432-a06a-322490135575",
+        "event_type": "PROPOSAL_CREATED",
+        "event_hash": "5648480d16fabed642ab35e0f830a98d488e142c82eeaa36af6d00574a69f376",
+        "created_at": "2026-10-18T05:10:56.383822+00:00"
+      },
+      {
+        "id": "de61ad45-a179-43d4-bef1-73235f4c07f3",
+        "event_type": "POLICY_ALLOW",
+        "event_hash": "5968337ee29fa2ec0b54659328839cfe100f97fdc26b1a3e17dcd285085f09ba",
+        "created_at": "2026-10-18T05:10:56.395023+00:00"
+      },
+      {
+        "id": "ab57098c-8b4e-4ec9-87db-782b858d2ed9",
+        "event_type": "EXECUTION_LIMITS_CHECKED",
+        "event_hash": "4771694ef771b1f2dc819fab7c2baf7569ab2341bce38d4b0613df1f9ea2fd56",
+        "created_at": "2026-10-18T05:11:14.527819+00:00"
+      },
+      {
+        "id": "13965a4f-ef27-4635-8324-bd227175d305",
+        "event_type": "CAPABILITY_ISSUED",
+        "event_hash": "dd655c2a1719f5039a89d6049e851a1c525c8aacfaa51a03a52588f628876fa1",
+        "created_at": "2026-10-18T05:11:14.544094+00:00"
+      },
+      {
+        "id": "8b0c4e04-9158-4de8-959c-25e8a3f6a15a",
+        "event_type": "SIGNING_COMPLETED",
+        "event_hash": "d6f5ab27fbe51299dab0198bfedfa8d77e7ea9cc5e4fddd28ae6587657ffa212",
+        "created_at": "2026-10-18T05:11:14.566724+00:00"
+      },
+      {
+        "id": "99f8e43b-0139-469a-a7db-e060f9659722",
+        "event_type": "TX_SUBMITTED",
+        "event_hash": "4a05340d2e3c33e63398bf6fe2de2faf5ddaa9056a86a065412c0373199ee959",
+        "created_at": "2026-10-18T05:11:14.752131+00:00"
+      },
+      {
+        "id": "4e5e943d-5942-4e52-a55b-7ae3a159f2de",
+        "event_type": "TX_CONFIRMED",
+        "event_hash": "0fffe09f29ced63958daf432c85ab43b0b8a8e9c67493b653223a9d52bd2e2e3",
+        "created_at": "2026-10-18T05:11:49.950506+00:00"
+      }
+    ],
+    "testnet_acceptance": "Organizer acceptance of Sepolia evidence remains unconfirmed"
+  }
+]

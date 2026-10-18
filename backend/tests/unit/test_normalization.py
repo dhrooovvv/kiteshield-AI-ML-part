@@ -24,6 +24,9 @@ class TestEthAddressValidation:
         result = validate_eth_address(addr)
         assert result.startswith("0x")
         assert len(result) == 42
+        from web3 import Web3
+
+        assert Web3.is_checksum_address(result)
 
     def test_valid_checksummed_address(self):
         """Already checksummed address should pass."""

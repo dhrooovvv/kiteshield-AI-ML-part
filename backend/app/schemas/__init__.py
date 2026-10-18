@@ -68,22 +68,11 @@ def validate_eth_address(address: str) -> str:
     Uses EIP-55 checksum validation.
     """
     if not _ETH_ADDRESS_PATTERN.match(address):
-        raise ValueError(f"Invalid Ethereum address format: {address}")
+        raise ValueError("Invalid Ethereum address format")
 
-    # Compute EIP-55 checksum
-    addr_lower = address[2:].lower()
-    import hashlib
+    from web3 import Web3
 
-    hash_hex = hashlib.sha3_256(addr_lower.encode("ascii")).hexdigest()
-
-    checksummed = "0x"
-    for i, char in enumerate(addr_lower):
-        if char in "abcdef":
-            checksummed += char.upper() if int(hash_hex[i], 16) >= 8 else char
-        else:
-            checksummed += char
-
-    return checksummed
+    return Web3.to_checksum_address(address)
 
 
 # ---- Request Schemas ----
@@ -129,6 +118,8 @@ class AgentProposalRequest(BaseModel):
     @classmethod
     def validate_amount(cls, v: str) -> str:
         """Validate amount is a positive integer string."""
+        if not re.fullmatch(r"[0-9]+", v):
+            raise ValueError("amount_wei must be a positive integer string of decimal digits only")
         try:
             amount = int(v)
         except (ValueError, TypeError):
@@ -158,6 +149,43 @@ class SignProposalRequest(BaseModel):
     """Request to sign and submit an authorized proposal."""
 
     proposal_id: str = Field(..., description="UUID of the proposal to sign")
+
+
+class ExecutionLimits(BaseModel):
+    """Optional caller restrictions; never a substitute for persisted authorization."""
+
+    model_config = {"extra": "forbid", "strict": True}
+    sender: str
+    recipient: str
+    amount_wei: str = Field(pattern=r"^[1-9][0-9]{0,24}$")
+    chain_id: int = Field(ge=11155111, le=11155111)
+    nonce: int = Field(ge=0)
+    max_gas_units: int = Field(ge=21000, le=1000000)
+    max_fee_per_gas_wei: int = Field(ge=1)
+    max_priority_fee_per_gas_wei: int = Field(ge=1)
+    max_total_cost_wei: str = Field(pattern=r"^[1-9][0-9]{0,30}$")
+
+    @field_validator("sender", "recipient")
+    @classmethod
+    def checksum_address(cls, value: str) -> str:
+        return validate_eth_address(value)
+
+    def check_envelope(self, sender: str, envelope: dict) -> None:
+        from app.exceptions import SigningRejectedError
+
+        if (
+            sender.lower() != self.sender.lower()
+            or envelope.get("to", "").lower() != self.recipient.lower()
+            or envelope.get("value") != int(self.amount_wei)
+            or envelope.get("chainId") != self.chain_id
+            or envelope.get("nonce") != self.nonce
+            or envelope["gas"] > self.max_gas_units
+            or envelope["maxFeePerGas"] > self.max_fee_per_gas_wei
+            or envelope["maxPriorityFeePerGas"] > self.max_priority_fee_per_gas_wei
+            or envelope["value"] + envelope["gas"] * envelope["maxFeePerGas"]
+            > int(self.max_total_cost_wei)
+        ):
+            raise SigningRejectedError("Execution exceeds explicitly approved payment limits")
 
 
 class EmergencyStopRequest(BaseModel):
@@ -220,7 +248,10 @@ class AuditProofResponse(BaseModel):
 
 
 class ProposalResponse(BaseModel):
-    """Transaction proposal response."""
+    """Transaction proposal response, including operator-configured automation limits."""
+
+    auto_execution_enabled: bool = False
+    auto_execution_max_wei: str = "100000000000000"
 
     id: str
     correlation_id: str
@@ -265,6 +296,10 @@ class TransactionResponse(BaseModel):
     id: str
     tx_hash: str | None = None
     status: str
+    execution_mode: str | None = None
+    execution_outcome: str | None = None
+    receipt: dict | None = None
+    explorer_url: str | None = None
     block_number: int | None = None
     gas_used: int | None = None
     error_message: str | None = None
@@ -296,13 +331,15 @@ class NormalizedAction(BaseModel):
     correlation_id: str
     action_type: AssetType = AssetType.NATIVE_ETH
     recipient: str  # Checksummed address
-    amount_wei: int  # Exact integer
+    amount_wei: int = Field(gt=0, le=10**24, strict=True)  # Exact integer
     chain_id: int = 11155111
 
     @property
     def amount_eth(self) -> str:
         """Human-readable ETH amount (for display only, not for computation)."""
-        return f"{self.amount_wei / 10**18:.18f}".rstrip("0").rstrip(".")
+        from app.services.amounts import wei_to_eth
+
+        return wei_to_eth(self.amount_wei)
 
     def canonical_string(self, nonce: str) -> str:
         """Canonical representation for digest computation.
@@ -374,6 +411,8 @@ class PolicyCreateRequest(BaseModel):
     @field_validator("max_amount_wei")
     @classmethod
     def validate_max_amount(cls, v: str) -> str:
+        if not re.fullmatch(r"[0-9]+", v):
+            raise ValueError("Amount must contain decimal digits only")
         try:
             amount = int(v)
         except (ValueError, TypeError):
@@ -387,6 +426,8 @@ class PolicyCreateRequest(BaseModel):
     def validate_optional_amount(cls, v: str | None) -> str | None:
         if v is None:
             return None
+        if not re.fullmatch(r"[0-9]+", v):
+            raise ValueError("Amount must contain decimal digits only")
         try:
             amount = int(v)
         except (ValueError, TypeError):
@@ -421,6 +462,8 @@ class PolicyUpdateRequest(BaseModel):
     def validate_optional_amount(cls, v: str | None) -> str | None:
         if v is None:
             return None
+        if not re.fullmatch(r"[0-9]+", v):
+            raise ValueError("Amount must be a positive integer string of decimal digits only")
         try:
             amount = int(v)
         except (ValueError, TypeError):

@@ -20,7 +20,9 @@ async def policy_with_limits(auth_client):
         "max_amount_wei": "500000000000000000",  # 0.5 ETH max
         "allowed_recipients": ["0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"],
     }
-    res = await auth_client.post("/api/v1/policies", json=payload)
+    res = await auth_client.post(
+        "/api/v1/policies", headers={"X-API-Key": "test-policy-admin-key-only"}, json=payload
+    )
     return res.json()["data"]
 
 

@@ -28,7 +28,10 @@ from app.api.routes import (
     security_router,
     transactions_router,
 )
+from app.api.routes.economics import router as economics_router
+from app.api.routes.portfolio import router as portfolio_router
 from app.core.config import get_settings
+from app.core.live_rpc import verify_live_rpc
 from app.core.logging import correlation_id_var, get_logger, setup_logging
 from app.core.security import generate_correlation_id
 from app.db import init_db
@@ -41,7 +44,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     """Application startup and shutdown lifecycle."""
     # Startup
     settings = get_settings()
+    app.state.verified_rpc = None
     setup_logging(settings.app_log_level)
+    # Validate live connectivity before DB initialization or accepting any requests.
+    app.state.verified_rpc = await verify_live_rpc(settings)
     logger.info(
         "Starting KiteShield Wallet backend (env=%s, chain_id=%s)",
         settings.app_env,
@@ -52,10 +58,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     await init_db()
     logger.info("Database initialized")
 
-    yield
-
-    # Shutdown
-    logger.info("Shutting down KiteShield Wallet backend")
+    try:
+        yield
+    finally:
+        app.state.verified_rpc = None
+        logger.info("Shutting down KiteShield Wallet backend")
 
 
 def create_app() -> FastAPI:
@@ -107,6 +114,8 @@ def create_app() -> FastAPI:
     app.include_router(transactions_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
     app.include_router(security_router, prefix="/api/v1")
+    app.include_router(economics_router, prefix="/api/v1")
+    app.include_router(portfolio_router, prefix="/api/v1")
 
     return app
 

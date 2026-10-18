@@ -40,6 +40,13 @@ class PromptInjectionDetectedError(ValidationError):
     error_code = "PROMPT_INJECTION_DETECTED"
 
 
+class PromptScreeningReviewRequiredError(KiteShieldError):
+    """Learned detectors disagree and normal proposal creation is paused."""
+
+    error_code = "PROMPT_SCREENING_REVIEW_REQUIRED"
+    status_code = 409
+
+
 class PromptScreeningUnavailableError(KiteShieldError):
     """The required prompt-injection screen could not produce a result."""
 

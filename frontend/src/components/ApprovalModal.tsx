@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { UserCheck, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, X } from 'lucide-react';
 import { api } from '../api/client.ts';
+import { useRole } from '../useCredentials.ts';
 import type { PendingApproval } from '../types/index.ts';
 
 interface ApprovalModalProps {
@@ -14,15 +15,16 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   onClose,
   onDecided,
 }) => {
-  const [approverName, setApproverName] = useState('user:security_officer');
+  const hasRequiredRole = useRole('approver');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleDecision = async (decision: 'APPROVE' | 'REJECT') => {
+    if (!hasRequiredRole) { setError('Human approver credential required. Connect it using Switch role.'); return; }
     setLoading(true);
     setError(null);
     try {
-      await api.decideApproval(approval.id, decision, approverName.trim() || 'user:admin');
+      await api.decideApproval(approval.id, decision);
       onDecided();
       onClose();
     } catch (err: unknown) {
@@ -112,7 +114,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
                 <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Requested Amount</span>
-                <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff' }}>
+                <span style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>
                   {approval.proposal?.amount_eth || '0'} ETH
                 </span>
               </div>
@@ -138,28 +140,12 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
           </div>
         </div>
 
-        {/* Approver ID input */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>
-            Approver Identity (Recorded in Immutable Audit Chain):
-          </label>
-          <input
-            type="text"
-            value={approverName}
-            onChange={(e) => setApproverName(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              borderRadius: '8px',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-light)',
-              color: '#fff',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.85rem',
-            }}
-          />
-        </div>
+        <p style={{ marginBottom: '20px', color: 'var(--text-muted)', fontSize: '.9rem' }}>
+          Approval uses the separate human-approver credential, or Demo administrator in the isolated simulation profile, configured in API key settings.
+          The backend records the authenticated identity. This authorization expires at the time shown above.
+        </p>
 
+        <p className="required-role-note">{hasRequiredRole ? 'Approval permission verified for the connected credential.' : 'Approve and reject require Human approver, or Demo administrator in simulation. Connect it using Switch role.'}</p>
         {/* Error message */}
         {error && (
           <div
@@ -187,7 +173,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
             type="button"
             className="btn btn-rose"
             onClick={() => handleDecision('REJECT')}
-            disabled={loading}
+            disabled={loading || !hasRequiredRole}
           >
             <XCircle size={16} />
             <span>Reject Proposal</span>
@@ -197,7 +183,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
             type="button"
             className="btn btn-emerald"
             onClick={() => handleDecision('APPROVE')}
-            disabled={loading}
+            disabled={loading || !hasRequiredRole}
           >
             <CheckCircle2 size={16} />
             <span>Approve Authorization</span>

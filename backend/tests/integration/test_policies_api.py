@@ -31,7 +31,9 @@ async def test_create_and_get_policy(auth_client):
         "escalation_threshold_wei": "100000000000000000",  # 0.1 ETH
         "allowed_recipients": ["0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"],
     }
-    create_res = await auth_client.post("/api/v1/policies", json=payload)
+    create_res = await auth_client.post(
+        "/api/v1/policies", headers={"X-API-Key": "test-policy-admin-key-only"}, json=payload
+    )
     assert create_res.status_code == 200
     create_data = create_res.json()["data"]
     assert create_data["version"] == 1
@@ -52,13 +54,19 @@ async def test_update_policy_increments_version(auth_client):
     payload = {
         "max_amount_wei": "500000000000000000",  # 0.5 ETH
     }
-    create_res = await auth_client.post("/api/v1/policies", json=payload)
+    create_res = await auth_client.post(
+        "/api/v1/policies", headers={"X-API-Key": "test-policy-admin-key-only"}, json=payload
+    )
     policy_id = create_res.json()["data"]["id"]
 
     update_payload = {
         "max_amount_wei": "2000000000000000000",  # 2 ETH
     }
-    update_res = await auth_client.put(f"/api/v1/policies/{policy_id}", json=update_payload)
+    update_res = await auth_client.put(
+        f"/api/v1/policies/{policy_id}",
+        headers={"X-API-Key": "test-policy-admin-key-only"},
+        json=update_payload,
+    )
     assert update_res.status_code == 200
     new_data = update_res.json()["data"]
     assert new_data["version"] == 2

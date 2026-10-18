@@ -5,6 +5,7 @@
 # Environment & Secrets (NEVER COMMIT)
 .env
 .env.*
+!.env.demo.example
 !.env.example
 *.key
 *.pem

@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
-import { ShieldCheck, CheckCircle, AlertTriangle, ShieldAlert, Edit2 } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ShieldAlert, Edit2, Copy, Check, ExternalLink } from 'lucide-react';
+import { ethToWei, weiToEth } from '../amounts.ts';
 import { api } from '../api/client.ts';
+import { useRole } from '../useCredentials.ts';
 import type { Policy } from '../types/index.ts';
 
 interface PolicyCardProps {
@@ -9,15 +12,18 @@ interface PolicyCardProps {
 }
 
 export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated }) => {
+  const hasRequiredRole = useRole('policyAdmin');
   const [showEditor, setShowEditor] = useState(false);
+  const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState(false);
   const [maxEth, setMaxEth] = useState(
-    policy ? (Number(policy.max_amount_wei) / 1e18).toString() : '1.0'
+    policy ? weiToEth(policy.max_amount_wei) : '1.0'
   );
   const [escalateEth, setEscalateEth] = useState(
-    policy?.escalation_threshold_wei ? (Number(policy.escalation_threshold_wei) / 1e18).toString() : '0.1'
+    policy?.escalation_threshold_wei ? weiToEth(policy.escalation_threshold_wei) : '0.1'
   );
   const [dailyEth, setDailyEth] = useState(
-    policy?.daily_limit_wei ? (Number(policy.daily_limit_wei) / 1e18).toString() : '5.0'
+    policy?.daily_limit_wei ? weiToEth(policy.daily_limit_wei) : '5.0'
   );
   const [allowedInput, setAllowedInput] = useState(
     policy?.allowed_recipients ? policy.allowed_recipients.join('\n') : ''
@@ -25,15 +31,39 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const fieldId = useId();
+
+  useEffect(() => {
+    if (showEditor) dialogRef.current?.showModal();
+  }, [showEditor]);
+
+  const closeEditor = () => {
+    if (loading) return;
+    setShowEditor(false);
+    triggerRef.current?.focus();
+  };
+
+  const openEditor = () => {
+    setMaxEth(policy ? weiToEth(policy.max_amount_wei) : '1.0');
+    setEscalateEth(policy ? (policy.escalation_threshold_wei === null ? '' : weiToEth(policy.escalation_threshold_wei)) : '0.1');
+    setDailyEth(policy ? (policy.daily_limit_wei === null ? '' : weiToEth(policy.daily_limit_wei)) : '5.0');
+    setAllowedInput(policy?.allowed_recipients?.join('\n') || '');
+    setError(null);
+    setShowEditor(true);
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasRequiredRole) { setError('Policy administrator credential required. Connect it using Switch role.'); return; }
     setLoading(true);
     setError(null);
 
     try {
-      const maxWei = BigInt(Math.round(parseFloat(maxEth) * 1e18)).toString();
-      const escWei = escalateEth ? BigInt(Math.round(parseFloat(escalateEth) * 1e18)).toString() : null;
-      const dailyWei = dailyEth ? BigInt(Math.round(parseFloat(dailyEth) * 1e18)).toString() : null;
+      const maxWei = ethToWei(maxEth);
+      const escWei = escalateEth ? ethToWei(escalateEth) : null;
+      const dailyWei = dailyEth ? ethToWei(dailyEth) : null;
 
       const allowedList = allowedInput
         .split('\n')
@@ -56,397 +86,148 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
     }
   };
 
+  const editor = showEditor && createPortal(
+    <dialog ref={dialogRef} className="policy-editor-dialog" aria-labelledby={fieldId + '-title'}
+      onCancel={(event) => { event.preventDefault(); closeEditor(); }}>
+      <form onSubmit={handleSave} aria-busy={loading}>
+        <div className="policy-editor-header">
+          <h2 id={fieldId + '-title'}>{policy ? 'Update security policy' : 'Create security policy'}</h2>
+          <p>{policy ? `Publishing creates version ${policy.version + 1} and makes it the active policy.` : 'Set spending limits and recipient restrictions for transaction evaluation.'}</p>
+        </div>
+        <fieldset className="policy-editor-fields" disabled={loading || !hasRequiredRole}>
+          <legend>Spending limits</legend>
+          <div className="policy-editor-field">
+            <label htmlFor={fieldId + '-maximum'}>Maximum transaction amount <span>ETH</span></label>
+            <input id={fieldId + '-maximum'} type="text" inputMode="decimal" required autoFocus
+              value={maxEth} onChange={(event) => setMaxEth(event.target.value)} />
+          </div>
+          <div className="policy-editor-field">
+            <label htmlFor={fieldId + '-approval'}>Human approval threshold <span>ETH · Optional</span></label>
+            <input id={fieldId + '-approval'} type="text" inputMode="decimal"
+              aria-describedby={fieldId + '-approval-help'} value={escalateEth}
+              onChange={(event) => setEscalateEth(event.target.value)} />
+            <p id={fieldId + '-approval-help'}>Amounts at or above this threshold require human approval. Leave blank to disable this threshold.</p>
+          </div>
+          <div className="policy-editor-field">
+            <label htmlFor={fieldId + '-daily'}>Daily spending budget <span>ETH · Optional</span></label>
+            <input id={fieldId + '-daily'} type="text" inputMode="decimal"
+              aria-describedby={fieldId + '-daily-help'} value={dailyEth}
+              onChange={(event) => setDailyEth(event.target.value)} />
+            <p id={fieldId + '-daily-help'}>Leave blank for no daily budget limit.</p>
+          </div>
+        </fieldset>
+        <fieldset className="policy-editor-fields policy-editor-recipients" disabled={loading || !hasRequiredRole}>
+          <legend>Recipient restrictions</legend>
+          <div className="policy-editor-field">
+            <label htmlFor={fieldId + '-recipients'}>Allowed recipients</label>
+            <textarea id={fieldId + '-recipients'} rows={3} className="font-mono"
+              aria-describedby={fieldId + '-recipients-help'} value={allowedInput}
+              onChange={(event) => setAllowedInput(event.target.value)} />
+            <p id={fieldId + '-recipients-help'}>Enter one wallet address per line. An empty list allows any recipient, subject to the remaining policy checks.</p>
+          </div>
+        </fieldset>
+        {error && <p className="policy-editor-error" role="alert">{error}</p>}
+        <div className="policy-editor-actions">
+          <button type="button" className="btn btn-outline" onClick={closeEditor} disabled={loading}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={loading || !hasRequiredRole}>
+            {loading ? 'Publishing…' : policy ? `Publish version ${policy.version + 1}` : 'Create policy'}
+          </button>
+        </div>
+      </form>
+    </dialog>, document.body
+  );
+
   if (!policy) {
     return (
       <>
-        <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <div className="glass-panel policy-panel" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
           <ShieldAlert size={32} color="var(--color-amber)" style={{ marginBottom: '10px' }} />
           <p>No active security policy found in system.</p>
-          <button className="btn btn-primary" style={{ marginTop: '14px' }} onClick={() => setShowEditor(true)}>
+          <p className="required-role-note">{hasRequiredRole ? 'Policy-edit permission verified.' : 'Requires Policy administrator, or Demo administrator in simulation. Connect it using Switch role.'}</p>
+          <button className="btn btn-primary" style={{ marginTop: '14px' }} ref={triggerRef} onClick={openEditor} disabled={!hasRequiredRole}>
             Create Initial Policy
           </button>
         </div>
 
-        {showEditor && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0, 0, 0, 0.8)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 1000,
-              padding: '16px',
-            }}
-          >
-            <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', padding: '24px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '6px' }}>
-                Create Initial Security Policy
-              </h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                Configure the deterministic limits used before any transaction can be authorized.
-              </p>
-
-              <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Max Amount per Transaction (ETH):
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={maxEth}
-                    onChange={(e) => setMaxEth(e.target.value)}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border-light)',
-                      color: '#fff',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Human Escalation Threshold (ETH):
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={escalateEth}
-                    onChange={(e) => setEscalateEth(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border-light)',
-                      color: '#fff',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Daily Spending Budget (ETH):
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={dailyEth}
-                    onChange={(e) => setDailyEth(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border-light)',
-                      color: '#fff',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                    Allowed Recipients (one address per line):
-                  </label>
-                  <textarea
-                    value={allowedInput}
-                    onChange={(e) => setAllowedInput(e.target.value)}
-                    rows={3}
-                    className="font-mono"
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '6px',
-                      background: 'var(--bg-input)',
-                      border: '1px solid var(--border-light)',
-                      color: '#fff',
-                      fontSize: '0.78rem',
-                    }}
-                  />
-                </div>
-
-                {error && (
-                  <div style={{ color: '#fb7185', fontSize: '0.82rem', padding: '8px', background: 'rgba(244, 63, 94, 0.1)', borderRadius: '6px' }}>
-                    {error}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                  <button type="button" className="btn btn-outline" onClick={() => setShowEditor(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={loading}>
-                    {loading ? 'Creating...' : 'Create Policy'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        {editor}
       </>
     );
   }
 
-  const maxAmountEth = (Number(policy.max_amount_wei) / 1e18).toFixed(4).replace(/\.?0+$/, '');
-  const escThresholdEth = policy.escalation_threshold_wei
-    ? (Number(policy.escalation_threshold_wei) / 1e18).toFixed(4).replace(/\.?0+$/, '')
-    : 'None';
-  const dailyLimitEth = policy.daily_limit_wei
-    ? (Number(policy.daily_limit_wei) / 1e18).toFixed(4).replace(/\.?0+$/, '')
-    : 'Unlimited';
+  const maxAmountEth = weiToEth(policy.max_amount_wei);
+  const threshold = policy.escalation_threshold_wei
+    ? weiToEth(policy.escalation_threshold_wei) : null;
+  const limits = [
+    { label: 'Autonomous cap', value: threshold ? `< ${threshold} ETH` : `≤ ${maxAmountEth} ETH` },
+    { label: 'Escalation threshold', value: threshold ? `≥ ${threshold} ETH` : 'None' },
+    { label: 'Absolute max cap', value: `${maxAmountEth} ETH` },
+    { label: 'Daily budget', value: policy.daily_limit_wei ? `${weiToEth(policy.daily_limit_wei)} ETH` : 'Unlimited',
+      help: 'UTC calendar day; gas excluded; pending reservations remain held.' },
+  ];
+
+  const copyAddress = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopiedAddress(address);
+      setCopyError(false);
+    } catch {
+      setCopyError(true);
+      setCopiedAddress(null);
+    }
+  };
 
   return (
-    <div className="glass-panel" style={{ padding: '24px' }}>
-      {/* Title & Actions */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '8px',
-              background: 'rgba(16, 185, 129, 0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-            }}
-          >
-            <ShieldCheck size={20} color="var(--color-emerald)" />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Active Security Policy</h3>
-              <span className="badge badge-allow" style={{ fontSize: '0.7rem' }}>
-                Version {policy.version}
-              </span>
-            </div>
-            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              Deterministic bounds enforced by KiteShield PolicyEngine
-            </p>
-          </div>
+    <div className="glass-panel policy-panel">
+      <div className="policy-panel-heading">
+        <div>
+          <h3>Active Security Policy</h3>
+          <span className="badge badge-allow">Version {policy.version}</span>
         </div>
-
-        <button className="btn btn-outline" onClick={() => setShowEditor(true)}>
-          <Edit2 size={14} />
-          <span>Update Rules</span>
+        <button className="btn btn-outline" ref={triggerRef} onClick={openEditor}
+          disabled={!hasRequiredRole}
+          aria-label="Update Rules"
+          title={hasRequiredRole ? 'Publish a new policy version' : 'Requires Policy administrator. Connect using Switch role.'}>
+          <Edit2 size={14} aria-hidden="true" /> Edit
         </button>
       </div>
 
-      {/* Thresholds Cards */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '14px',
-          marginBottom: '20px',
-        }}
-      >
-        <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)', padding: '14px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-emerald)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>
-            <CheckCircle size={14} />
-            <span>Autonomous Cap</span>
+      <dl className="policy-limits">
+        {limits.map(limit => (
+          <div key={limit.label} title={limit.help}>
+            <dt>{limit.label}</dt>
+            <dd>{limit.value}</dd>
           </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', marginTop: '6px' }}>
-            &le; {escThresholdEth} ETH
-          </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Transfers under this amount are automatically allowed
-          </div>
-        </div>
+        ))}
+      </dl>
 
-        <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)', padding: '14px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-amber)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>
-            <AlertTriangle size={14} />
-            <span>Escalation Threshold</span>
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', marginTop: '6px' }}>
-            &gt; {escThresholdEth} ETH
-          </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Transfers above this require explicit human authorization
-          </div>
-        </div>
-
-        <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)', padding: '14px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-rose)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>
-            <ShieldAlert size={14} />
-            <span>Absolute Max Cap</span>
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', marginTop: '6px' }}>
-            {maxAmountEth} ETH
-          </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Strict denial &mdash; no action above this can be signed
-          </div>
-        </div>
-
-        <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)', padding: '14px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--color-blue)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase' }}>
-            <ShieldCheck size={14} />
-            <span>Daily Budget Limit</span>
-          </div>
-          <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fff', marginTop: '6px' }}>
-            {dailyLimitEth} ETH
-          </div>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '2px' }}>
-            Rolling daily aggregate limit across all proposals
-          </div>
-        </div>
-      </div>
-
-      {/* Recipient Allowlists */}
-      <div style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border-light)', padding: '16px', borderRadius: '10px' }}>
-        <h4 style={{ fontSize: '0.82rem', color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: '8px', fontWeight: 600 }}>
-          Recipient Address Allowlist:
-        </h4>
+      <div className="policy-allowlist">
+        <h4>Recipient allowlist <span>{policy.allowed_recipients?.length || 0}</span></h4>
         {policy.allowed_recipients && policy.allowed_recipients.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {policy.allowed_recipients.map((addr, i) => (
-              <div key={i} className="font-mono" style={{ fontSize: '0.78rem', color: 'var(--color-cyan)', background: 'rgba(0, 0, 0, 0.25)', padding: '6px 10px', borderRadius: '6px' }}>
-                {addr}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-            Permissive allowlist (any destination allowed subject to amount limits)
-          </span>
-        )}
-      </div>
-
-      {/* Editor Modal */}
-      {showEditor && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '16px',
-          }}
-        >
-          <div className="glass-panel" style={{ width: '100%', maxWidth: '520px', padding: '24px' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '6px' }}>
-              Create New Policy Version
-            </h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Incrementing the policy creates an immutable version snapshot (v{policy.version + 1}).
-            </p>
-
-            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                  Max Amount per Transaction (ETH):
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={maxEth}
-                  onChange={(e) => setMaxEth(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-light)',
-                    color: '#fff',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                  Human Escalation Threshold (ETH):
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={escalateEth}
-                  onChange={(e) => setEscalateEth(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-light)',
-                    color: '#fff',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                  Daily Spending Budget (ETH):
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  value={dailyEth}
-                  onChange={(e) => setDailyEth(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-light)',
-                    color: '#fff',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>
-                  Allowed Recipients (one address per line):
-                </label>
-                <textarea
-                  value={allowedInput}
-                  onChange={(e) => setAllowedInput(e.target.value)}
-                  rows={3}
-                  className="font-mono"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    background: 'var(--bg-input)',
-                    border: '1px solid var(--border-light)',
-                    color: '#fff',
-                    fontSize: '0.78rem',
-                  }}
-                />
-              </div>
-
-              {error && (
-                <div style={{ color: '#fb7185', fontSize: '0.82rem', padding: '8px', background: 'rgba(244, 63, 94, 0.1)', borderRadius: '6px' }}>
-                  {error}
+          <ul className="policy-address-list">
+            {policy.allowed_recipients.map(address => (
+              <li key={address}>
+                <span className="policy-address">{address}</span>
+                <div className="policy-address-actions">
+                  <button type="button" className="policy-address-action"
+                    aria-label={`Copy address ${address}`} title="Copy address"
+                    onClick={() => copyAddress(address)}>
+                    {copiedAddress === address ? <Check size={15} /> : <Copy size={15} />}
+                  </button>
+                  <a className="policy-address-action" href={`https://sepolia.etherscan.io/address/${address}`}
+                    target="_blank" rel="noopener noreferrer" title="View on Sepolia Etherscan"
+                    aria-label={`View address ${address} on Sepolia Etherscan`}>
+                    <ExternalLink size={15} />
+                  </a>
                 </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setShowEditor(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Creating...' : `Publish Version ${policy.version + 1}`}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              </li>
+            ))}
+          </ul>
+        ) : <p className="policy-permissive">Any recipient allowed, subject to policy limits.</p>}
+        {(copiedAddress || copyError) && <p className="policy-copy-feedback" role="status">
+          {copyError ? 'Copy unavailable. Select the address to copy it.' : 'Address copied'}
+        </p>}
+      </div>
+      {editor}
     </div>
   );
 };

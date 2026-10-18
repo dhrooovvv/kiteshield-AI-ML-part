@@ -11,6 +11,25 @@ Validates the full transaction proposal lifecycle:
 
 import pytest
 
+from app.ai_ml import EnsembleScreenResult
+from app.ai_ml.experimental_decision_policy import ExperimentalClassification
+from app.ai_ml.schemas import InjectionLabel, InjectionScreenResult
+from app.api.routes import proposals
+
+
+async def benign_screening_result(_prompt):
+    return EnsembleScreenResult(
+        classification=ExperimentalClassification.BENIGN,
+        reason_code="all_negative",
+        rules=InjectionScreenResult(InjectionLabel.BENIGN, 0.5, ()),
+        horizon_attack=False,
+        horizon_score=0.01,
+        bastion_attack=False,
+        bastion_score=0.01,
+        detector_versions=(("rules", "rules-v1"), ("horizon", "test"), ("bastion", "test")),
+        latency_ms=0.1,
+    )
+
 
 @pytest.fixture
 async def active_policy(auth_client):
@@ -20,13 +39,16 @@ async def active_policy(auth_client):
         "escalation_threshold_wei": "100000000000000000",  # 0.1 ETH escalation
         "allowed_recipients": ["0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"],
     }
-    res = await auth_client.post("/api/v1/policies", json=payload)
+    res = await auth_client.post(
+        "/api/v1/policies", headers={"X-API-Key": "test-policy-admin-key-only"}, json=payload
+    )
     return res.json()["data"]
 
 
 @pytest.mark.asyncio
-async def test_agent_propose_endpoint(auth_client):
+async def test_agent_propose_endpoint(auth_client, monkeypatch):
     """Natural language agent endpoint correctly extracts and creates proposal."""
+    monkeypatch.setattr(proposals.screening_service, "screen", benign_screening_result)
     res = await auth_client.post(
         "/api/v1/proposals/agent",
         json={
@@ -137,6 +159,7 @@ async def test_escalate_and_approval_flow(auth_client, active_policy):
     # 5. Human approves
     decide_res = await auth_client.post(
         f"/api/v1/approvals/{approval_id}/decide",
+        headers={"X-API-Key": "test-human-approver-key-only"},
         json={"decision": "APPROVE", "approved_by": "user:security_officer"},
     )
     assert decide_res.status_code == 200
@@ -170,6 +193,7 @@ async def test_escalate_and_rejection_flow(auth_client, active_policy):
     # 3. Human rejects
     decide_res = await auth_client.post(
         f"/api/v1/approvals/{approval_id}/decide",
+        headers={"X-API-Key": "test-human-approver-key-only"},
         json={"decision": "REJECT", "approved_by": "user:admin"},
     )
     assert decide_res.status_code == 200

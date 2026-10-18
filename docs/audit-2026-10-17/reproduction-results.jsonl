@@ -1,0 +1,9 @@
+{"probe": "daily_limit_0.1_ETH_two_0.06_ETH_transfers", "results": [{"decision": "ALLOW", "sign_http": 200}, {"decision": "ALLOW", "sign_http": 200}], "spending_records": 0}
+{"probe": "policy_tightened_after_evaluation", "new_max_wei": "1", "sign_http": 200, "status": "SUBMITTED"}
+{"probe": "reevaluate_submitted_proposal", "http": 200, "status": "ALLOWED"}
+{"probe": "proposer_credential_approves_with_self_declared_identity", "http": 200, "approved_by": "arbitrary-claimed-human"}
+{"probe": "approved_record_expired_before_sign", "sign_http": 200, "status": "SUBMITTED"}
+{"probe": "broadcast_side_effect_then_error", "http": 502, "broadcast_calls": 1, "persisted_status": "ALLOWED", "persisted_token_rows": 0}
+{"probe": "parser", "prompt": "Send .03 ETH to 0x1212121212121212121212121212121212121212", "amount_wei": "3000000000000000000"}
+{"probe": "parser", "prompt": "Send ETH to 0x1212121212121212121212121212121212121212", "amount_wei": "10000000000000000"}
+{"probe": "parser", "prompt": "Send -0.03 ETH to 0x1212121212121212121212121212121212121212", "amount_wei": "30000000000000000"}

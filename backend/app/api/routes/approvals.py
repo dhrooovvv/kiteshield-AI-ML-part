@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.logging import correlation_id_var, get_logger
-from app.core.security import verify_api_key
+from app.core.security import require_approver, verify_api_key
 from app.db import get_db_session
 from app.exceptions import (
     ApprovalAlreadyDecidedError,
@@ -32,7 +32,9 @@ from app.schemas import (
     ApprovalDecisionRequest,
     ProposalStatus,
 )
+from app.services.amounts import wei_to_eth
 from app.services.audit import AuditService
+from app.services.execution_lock import lock_execution
 
 logger = get_logger("routes.approvals")
 router = APIRouter(prefix="/approvals", tags=["Approvals"])
@@ -56,7 +58,7 @@ def _format_approval(approval: ApprovalRequest, proposal: Proposal | None = None
             "prompt": proposal.agent_prompt,
             "recipient": proposal.recipient,
             "amount_wei": proposal.amount_wei,
-            "amount_eth": f"{int(proposal.amount_wei) / 10**18:.6f}".rstrip("0").rstrip("."),
+            "amount_eth": wei_to_eth(proposal.amount_wei),
             "chain_id": proposal.chain_id,
         }
     return data
@@ -103,9 +105,10 @@ async def decide_approval(
     approval_id: str,
     request: ApprovalDecisionRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    _: Annotated[str, Depends(verify_api_key)],
+    actor: Annotated[str, Depends(require_approver)],
 ) -> APIResponse:
     """Approve or reject an escalated proposal."""
+    await lock_execution(session)
     cid = correlation_id_var.get()
     stmt = (
         select(ApprovalRequest)
@@ -142,11 +145,30 @@ async def decide_approval(
             details={"expires_at": approval.expires_at},
         )
 
+    if not proposal or proposal.status != "ESCALATED":
+        raise ApprovalAlreadyDecidedError("Proposal is no longer awaiting approval")
+    from app.models import Policy
+
+    current = await session.scalar(select(Policy).where(Policy.is_active.is_(True)))
+    if not current or approval.policy_version != current.version:
+        raise ApprovalAlreadyDecidedError("Policy changed; reevaluate before approval")
+    from app.schemas import NormalizedAction
+
+    expected = NormalizedAction(
+        proposal_id=proposal.id,
+        correlation_id=proposal.correlation_id,
+        recipient=proposal.recipient,
+        amount_wei=int(proposal.amount_wei),
+        chain_id=proposal.chain_id,
+    )
+    if approval.action_digest != expected.action_digest_without_nonce():
+        raise ApprovalAlreadyDecidedError("Approval no longer matches the exact action")
+
     now_str = utc_now_str()
 
     if request.decision == "APPROVE":
         approval.status = "APPROVED"
-        approval.approved_by = request.approved_by
+        approval.approved_by = actor
         approval.decided_at = now_str
         if proposal:
             proposal.status = ProposalStatus.APPROVED
@@ -156,18 +178,18 @@ async def decide_approval(
             session=session,
             event_type="APPROVAL_APPROVED",
             correlation_id=proposal.correlation_id if proposal else cid,
-            actor=request.approved_by,
+            actor=actor,
             details={
                 "approval_id": approval.id,
                 "proposal_id": approval.proposal_id,
                 "action_digest": approval.action_digest,
             },
         )
-        logger.info("Approval %s APPROVED by %s", approval.id, request.approved_by)
+        logger.info("Approval %s APPROVED by %s", approval.id, actor)
 
     else:
         approval.status = "REJECTED"
-        approval.approved_by = request.approved_by
+        approval.approved_by = actor
         approval.decided_at = now_str
         if proposal:
             proposal.status = ProposalStatus.REJECTED
@@ -177,14 +199,14 @@ async def decide_approval(
             session=session,
             event_type="APPROVAL_REJECTED",
             correlation_id=proposal.correlation_id if proposal else cid,
-            actor=request.approved_by,
+            actor=actor,
             details={
                 "approval_id": approval.id,
                 "proposal_id": approval.proposal_id,
                 "action_digest": approval.action_digest,
             },
         )
-        logger.info("Approval %s REJECTED by %s", approval.id, request.approved_by)
+        logger.info("Approval %s REJECTED by %s", approval.id, actor)
 
     await session.flush()
     return APIResponse(

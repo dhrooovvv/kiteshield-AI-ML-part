@@ -12,11 +12,13 @@ import json
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import correlation_id_var, get_logger
 from app.core.security import verify_api_key
 from app.db import get_db_session
+from app.models import AuditEvent, Proposal
 from app.schemas import (
     APIResponse,
     AuditCheckpointRequest,
@@ -124,6 +126,60 @@ async def verify_audit_integrity(
         data={"is_valid": is_valid, "errors": errors, "checked_limit": limit},
         meta={"correlation_id": cid},
     )
+
+
+@router.get("/prompt-reviews", response_model=APIResponse)
+async def list_prompt_screening_reviews(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[str, Depends(verify_api_key)],
+    limit: int = 50,
+) -> APIResponse:
+    """List persistent prompt-screening reviews without raw prompt text."""
+    safe_limit = max(1, min(limit, 100))
+    result = await session.execute(
+        select(AuditEvent)
+        .where(AuditEvent.event_type == "PROMPT_SCREENING_REVIEW_REQUIRED")
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        .limit(safe_limit)
+    )
+    reviews = []
+    for event in result.scalars().all():
+        details = json.loads(event.details) if isinstance(event.details, str) else event.details
+        reviews.append(
+            {
+                "id": event.id,
+                "correlation_id": event.correlation_id,
+                "event_type": event.event_type,
+                "status": details.get("status", "REVIEW_REQUIRED"),
+                "review_type": details.get("review_type", "PROMPT_SCREENING"),
+                "reason_code": details.get("reason_code"),
+                "prompt_digest": details.get("prompt_digest"),
+                "created_at": event.created_at,
+            }
+        )
+    return APIResponse(
+        data=reviews,
+        meta={"correlation_id": correlation_id_var.get(), "total": len(reviews)},
+    )
+
+
+@router.get("/screening-counts", response_model=APIResponse)
+async def screening_counts(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    _: Annotated[str, Depends(verify_api_key)],
+) -> APIResponse:
+    """Global blocked-attempt counts, independent of proposal-list pagination."""
+    screening = await session.scalar(select(func.count()).select_from(AuditEvent).where(
+        AuditEvent.event_type == "PROMPT_SCREENING_BLOCKED"
+    ))
+    policy = await session.scalar(select(func.count()).select_from(Proposal).where(
+        Proposal.status == "BLOCKED"
+    ))
+    return APIResponse(data={
+        "blocked_count": screening + policy,
+        "screening_block_count": screening,
+        "policy_block_count": policy,
+    })
 
 
 @router.get("/{correlation_id}", response_model=APIResponse)

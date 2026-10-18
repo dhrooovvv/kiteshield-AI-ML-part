@@ -14,6 +14,7 @@ async def test_audit_trail_recorded_and_verified(auth_client):
     # 1. Setup policy
     await auth_client.post(
         "/api/v1/policies",
+        headers={"X-API-Key": "test-policy-admin-key-only"},
         json={
             "max_amount_wei": "1000000000000000000",
             "allowed_recipients": ["0x742d35Cc6634C0532925a3b844Bc9e7595f2bD1e"],

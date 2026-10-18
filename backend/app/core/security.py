@@ -16,9 +16,29 @@ from fastapi.security import APIKeyHeader
 
 from app.core.config import get_settings
 from app.core.logging import correlation_id_var
+from app.exceptions import ValidationError
 
 # API key header scheme
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def reject_credentials_in_text(text: str) -> None:
+    """Do not forward configured credentials to extraction or persist them as prompts."""
+    settings = get_settings()
+    configured = (
+        settings.api_key,
+        settings.approver_api_key,
+        settings.policy_admin_api_key,
+        settings.demo_admin_api_key,
+        settings.emergency_stop_admin_api_key,
+        settings.signer_private_key,
+        settings.capability_token_secret,
+        settings.openai_api_key,
+    )
+    if any(value and value in text for value in configured):
+        raise ValidationError("Remove credentials from the request; no proposal was created")
+
+
 emergency_stop_admin_api_key_header = APIKeyHeader(
     name="X-Emergency-Stop-Admin-Key", auto_error=False
 )
@@ -38,13 +58,70 @@ async def verify_api_key(
         )
 
     settings = get_settings()
-    if not secrets.compare_digest(api_key, settings.api_key):
+    if settings.demo_admin_api_key and secrets.compare_digest(api_key, settings.demo_admin_api_key):
+        if (
+            settings.app_env != "demo"
+            or settings.execution_mode != "simulated"
+            or settings.database_url != "sqlite+aiosqlite:///./kiteshield-demo.db"
+            or settings.signer_private_key != "b" * 64
+        ):
+            raise HTTPException(
+                403,
+                detail={
+                    "code": "DEMO_ADMIN_SIMULATION_ONLY",
+                    "message": (
+                        "Demo administrator requires the isolated simulation profile; "
+                        "never live Sepolia"
+                    ),
+                },
+            )
+        return "demo_admin"
+    if not any(
+        configured and secrets.compare_digest(api_key, configured)
+        for configured in (
+            settings.api_key,
+            settings.approver_api_key,
+            settings.policy_admin_api_key,
+        )
+    ):
         raise HTTPException(
             status_code=401,
             detail={"code": "INVALID_API_KEY", "message": "Invalid API key"},
         )
 
-    return api_key
+    if secrets.compare_digest(api_key, settings.api_key):
+        return "proposer"
+    if settings.approver_api_key and secrets.compare_digest(api_key, settings.approver_api_key):
+        return "human_approver"
+    return "policy_administrator"
+
+
+async def require_approver(actor: Annotated[str, Security(verify_api_key)]) -> str:
+    if actor not in ("human_approver", "demo_admin"):
+        raise HTTPException(
+            403, detail={"code": "ROLE_FORBIDDEN", "message": "Human approver credential required"}
+        )
+    return actor
+
+
+async def require_proposer(actor: Annotated[str, Security(verify_api_key)]) -> str:
+    if actor not in ("proposer", "demo_admin"):
+        raise HTTPException(
+            403, detail={"code": "ROLE_FORBIDDEN", "message": "Proposer credential required"}
+        )
+    return actor
+
+
+async def require_policy_admin(actor: Annotated[str, Security(verify_api_key)]) -> str:
+    if actor not in ("policy_administrator", "demo_admin"):
+        raise HTTPException(
+            403,
+            detail={
+                "code": "ROLE_FORBIDDEN",
+                "message": "Policy administrator credential required",
+            },
+        )
+    return actor
 
 
 async def verify_emergency_stop_admin(

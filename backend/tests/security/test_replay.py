@@ -10,11 +10,12 @@ Verifies:
 import pytest
 import pytest_asyncio
 
-from app.exceptions import TokenConsumedError
+from app.exceptions import SigningRejectedError, TokenConsumedError
 from app.models import Policy
 from app.schemas import NormalizedAction
 from app.services.capability import CapabilityService
 from app.services.signer import IsolatedSigner
+from tests.authorization_support import seed_authorization
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def test_action():
 
 
 @pytest_asyncio.fixture
-async def seeded_session(test_session):
+async def seeded_session(test_session, test_action):
     """Session with an active policy for signer verification."""
     policy = Policy(
         id="test-policy-id",
@@ -49,6 +50,7 @@ async def seeded_session(test_session):
     )
     test_session.add(policy)
     await test_session.flush()
+    await seed_authorization(test_session, test_action)
     return test_session
 
 
@@ -101,7 +103,7 @@ class TestTokenReplay:
     async def test_different_tokens_for_same_action(
         self, signer, cap_service, test_action, seeded_session
     ):
-        """Different tokens for the same action should each work once."""
+        """Different tokens cannot reopen a signed execution."""
         token1, _ = await cap_service.issue_token(
             session=seeded_session, action=test_action, policy_version=1
         )
@@ -121,9 +123,5 @@ class TestTokenReplay:
         assert "tx_hash" in result1
 
         # Second token also works (it's a different token)
-        result2 = await signer.sign_transaction(
-            session=seeded_session,
-            token=token2,
-            action=test_action,
-        )
-        assert "tx_hash" in result2
+        with pytest.raises(SigningRejectedError):
+            await signer.sign_transaction(session=seeded_session, token=token2, action=test_action)

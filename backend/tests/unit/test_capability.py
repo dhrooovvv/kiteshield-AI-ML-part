@@ -16,6 +16,12 @@ from app.exceptions import (
 )
 from app.schemas import NormalizedAction
 from app.services.capability import _AUDIENCE, _ISSUER, CapabilityService
+from tests.authorization_support import seed_authorization
+
+
+@pytest.fixture(autouse=True)
+async def authorized_context(test_session, test_action):
+    await seed_authorization(test_session, test_action)
 
 
 @pytest.fixture
@@ -80,6 +86,7 @@ class TestTokenIssuance:
     @pytest.mark.asyncio
     async def test_issue_with_approval(self, cap_service, test_action, test_session):
         """Escalated action with valid approval → token issued."""
+        await seed_authorization(test_session, test_action, approval_id="approval-789")
         token, claims = await cap_service.issue_token(
             session=test_session,
             action=test_action,
@@ -104,6 +111,8 @@ class TestTokenIssuance:
             recipient="0x0000000000000000000000000000000000000001",
             amount_wei=100,
         )
+        await seed_authorization(test_session, action1)
+        await seed_authorization(test_session, action2)
         _, claims1 = await cap_service.issue_token(test_session, action1, policy_version=1)
         _, claims2 = await cap_service.issue_token(test_session, action2, policy_version=1)
         assert claims1["tx_digest"] != claims2["tx_digest"]

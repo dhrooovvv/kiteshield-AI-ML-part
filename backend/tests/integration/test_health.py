@@ -19,11 +19,12 @@ async def test_health_endpoint(client):
 
 @pytest.mark.asyncio
 async def test_readiness_endpoint(client):
-    """Readiness endpoint should return 200."""
+    """Readiness reports model state without exposing implementation details."""
     response = await client.get("/api/v1/ready")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ready"
+    assert data["checks"]["prompt_screening"]["required_for_agent_screening"] is False
 
 
 @pytest.mark.asyncio

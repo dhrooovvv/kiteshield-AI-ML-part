@@ -23,6 +23,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -98,9 +99,7 @@ class Proposal(Base):
     approval_request = relationship(
         "ApprovalRequest", back_populates="proposal", uselist=False, lazy="selectin"
     )
-    capability_tokens = relationship(
-        "CapabilityToken", back_populates="proposal", lazy="selectin"
-    )
+    capability_tokens = relationship("CapabilityToken", back_populates="proposal", lazy="selectin")
     transaction = relationship(
         "Transaction", back_populates="proposal", uselist=False, lazy="selectin"
     )
@@ -121,6 +120,7 @@ class PolicyDecision(Base):
     reason_codes = Column(Text, nullable=False)  # JSON array
     policy_version = Column(Integer, nullable=False)
     evaluated_at = Column(String, nullable=False, default=utc_now_str)
+    action_digest = Column(String, nullable=True)
 
     # Relationship
     proposal = relationship("Proposal", back_populates="policy_decision", lazy="selectin")
@@ -142,6 +142,7 @@ class ApprovalRequest(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     proposal_id = Column(String, ForeignKey("proposals.id"), nullable=False, unique=True)
     action_digest = Column(String, nullable=False)  # SHA-256 of canonical action
+    policy_version = Column(Integer, nullable=True)
     status = Column(String, nullable=False, default="PENDING")
     expires_at = Column(String, nullable=False)
     approved_by = Column(String, nullable=True)
@@ -196,6 +197,9 @@ class Transaction(Base):
     proposal_id = Column(String, ForeignKey("proposals.id"), nullable=False, unique=True)
     tx_hash = Column(String, unique=True, nullable=True)
     status = Column(String, nullable=False, default="SIGNING")
+    execution_mode = Column(String, nullable=True)
+    execution_outcome = Column(String, nullable=True)
+    receipt_json = Column(Text, nullable=True)
     block_number = Column(Integer, nullable=True)
     gas_used = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
@@ -234,6 +238,10 @@ class AuditEvent(Base):
     previous_hash = Column(String, nullable=True)
     event_hash = Column(String, nullable=False)
     created_at = Column(String, nullable=False, default=utc_now_str, index=True)
+    # Nullable so historical audit rows remain unchanged during migration.
+    review_dedupe_key = Column(String(64), nullable=True)
+
+    __table_args__ = (UniqueConstraint("review_dedupe_key", name="uq_audit_review_dedupe_key"),)
 
 
 class AuditCheckpoint(Base):
@@ -285,3 +293,46 @@ class ExecutionControl(Base):
     changed_by = Column(String, nullable=False, default="system")
     version = Column(Integer, nullable=False, default=0)
     updated_at = Column(String, nullable=False, default=utc_now_str)
+
+
+class ExecutionMutex(Base):
+    """SQLite write-lock target, independent of emergency-stop state."""
+
+    __tablename__ = "execution_mutex"
+    id = Column(String, primary_key=True)
+
+
+class AutonomousIntent(Base):
+    """Server-recorded benign screening provenance; legacy proposals are ineligible."""
+
+    __tablename__ = "autonomous_intents"
+    proposal_id = Column(String, ForeignKey("proposals.id"), primary_key=True)
+    action_digest = Column(String, nullable=False)
+    outcome = Column(String, nullable=False, default="BENIGN")
+    started = Column(Boolean, nullable=False, default=False)
+
+
+class ExecutionAttempt(Base):
+    """Durable ownership, nonce, and signed payload for exactly one proposal.
+
+    An uncertain broadcast retains ownership and its spending reservation.
+    The same bytes may be retried, never a fresh transaction for this intent.
+    """
+
+    __tablename__ = "execution_attempts"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    proposal_id = Column(String, ForeignKey("proposals.id"), nullable=False, unique=True)
+    sender = Column(String, nullable=False)
+    chain_id = Column(Integer, nullable=False)
+    nonce = Column(Integer, nullable=False)
+    envelope = Column(Text, nullable=False)
+    policy_version = Column(Integer, nullable=False)
+    approval_id = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="PREPARED")
+    execution_mode = Column(String, nullable=False, default="simulated")
+    raw_transaction = Column(Text, nullable=True)
+    tx_hash = Column(String, nullable=True)
+    created_at = Column(String, nullable=False, default=utc_now_str)
+    __table_args__ = (
+        UniqueConstraint("sender", "chain_id", "execution_mode", "nonce", name="uq_sender_nonce"),
+    )

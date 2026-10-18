@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { Filter, Plus, Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { ProposalCard } from '../components/ProposalCard.tsx';
 import { DirectProposalForm } from '../components/DirectProposalForm.tsx';
+import { ProposalStatusFilter } from '../components/ProposalStatusFilter.tsx';
+import { matchesProposalFilter } from '../proposalFilters.ts';
+import type { ProposalFilter } from '../proposalFilters.ts';
+import { useRole } from '../useCredentials.ts';
 import type { Proposal } from '../types/index.ts';
 
 interface ProposalsViewProps {
@@ -10,6 +14,7 @@ interface ProposalsViewProps {
   onProposalUpdated: (proposal: Proposal) => void;
   onOpenAudit: (correlationId: string) => void;
   onOpenDetails: (proposal: Proposal) => void;
+  executionMode?: 'simulated' | 'sepolia';
 }
 
 export const ProposalsView: React.FC<ProposalsViewProps> = ({
@@ -18,19 +23,19 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
   onProposalUpdated,
   onOpenAudit,
   onOpenDetails,
+  executionMode,
 }) => {
-  const [filterStatus, setFilterStatus] = useState<string>('ALL');
+  const hasRequiredRole = useRole('proposer');
+  const [filterStatus, setFilterStatus] = useState<ProposalFilter>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showDirectForm, setShowDirectForm] = useState(false);
 
-  const statusOptions = ['ALL', 'PROPOSED', 'ALLOWED', 'ESCALATED', 'BLOCKED', 'APPROVED', 'SUBMITTED'];
-
   const filtered = proposals.filter((p) => {
-    if (filterStatus !== 'ALL' && p.status !== filterStatus) {
+    if (!matchesProposalFilter(p.status, filterStatus)) {
       return false;
     }
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
       const matchPrompt = p.prompt.toLowerCase().includes(q);
       const matchRecipient = p.recipient.toLowerCase().includes(q);
       const matchId = p.id.toLowerCase().includes(q);
@@ -39,32 +44,26 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
     return true;
   });
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Title & Actions Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Transaction Proposals</h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Full lifecycle tracking: Prompt &rarr; Normalization &rarr; Policy Evaluation &rarr; Signing &rarr; Broadcast
-          </p>
-        </div>
+  const hasFilters = filterStatus !== 'ALL' || searchQuery.trim() !== '';
 
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowDirectForm(!showDirectForm)}
-        >
-          <Plus size={16} />
-          <span>{showDirectForm ? 'Close Form' : 'New Structured Proposal'}</span>
+  return (
+    <section className="proposals-page" aria-label="Transaction proposals">
+      <div className="proposals-page-heading">
+        <div>
+          <h2>Transaction proposals</h2>
+          <p>Review transactions, check policy decisions, and track submission.</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowDirectForm(!showDirectForm)}
+          disabled={!hasRequiredRole && !showDirectForm} aria-expanded={showDirectForm} aria-controls="direct-proposal-form">
+          <Plus size={16} aria-hidden="true" />
+          {showDirectForm ? 'Close form' : 'New structured proposal'}
         </button>
       </div>
 
-      {/* Collapsible Manual Proposal Form */}
+      {!hasRequiredRole && <p className="required-role-note proposals-role-note">Creating, evaluating, and submitting proposals requires Proposer. Connect it using Switch role.</p>}
       {showDirectForm && (
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '14px' }}>
-            Submit Direct Proposal
-          </h3>
+        <div id="direct-proposal-form" className="glass-panel proposals-direct-form">
+          <h3>Submit a structured proposal</h3>
           <DirectProposalForm
             onProposalCreated={(created) => {
               onProposalCreated(created);
@@ -75,82 +74,36 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
         </div>
       )}
 
-      {/* Filter and Search Bar */}
-      <div
-        className="glass-panel"
-        style={{
-          padding: '14px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '12px',
-        }}
-      >
-        {/* Search */}
-        <div style={{ position: 'relative', width: '280px' }}>
-          <input
-            type="text"
-            value={searchQuery}
+      <div className="proposals-toolbar">
+        <label className="proposals-search">
+          <Search size={17} aria-hidden="true" />
+          <input type="search" value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search prompt, recipient, ID..."
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              paddingLeft: '34px',
-              borderRadius: '8px',
-              background: 'var(--bg-input)',
-              border: '1px solid var(--border-light)',
-              color: '#fff',
-              fontSize: '0.85rem',
-            }}
-          />
-          <Search size={15} color="var(--text-dim)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-        </div>
-
-        {/* Status Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto' }}>
-          <Filter size={15} color="var(--text-dim)" style={{ marginRight: '4px' }} />
-          {statusOptions.map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              style={{
-                background: filterStatus === st ? 'rgba(0, 242, 254, 0.2)' : 'var(--bg-subtle)',
-                color: filterStatus === st ? 'var(--color-cyan)' : 'var(--text-muted)',
-                border: `1px solid ${filterStatus === st ? 'var(--color-cyan)' : 'var(--border-light)'}`,
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'var(--font-main)',
-              }}
-            >
-              {st}
-            </button>
-          ))}
-        </div>
+            aria-label="Search proposals" placeholder="Search prompt, recipient, or ID" />
+        </label>
+        <ProposalStatusFilter value={filterStatus} onChange={setFilterStatus} />
+        <span className="proposals-result-count" role="status">
+          {hasFilters ? `${filtered.length} of ${proposals.length}` : proposals.length} {filtered.length === 1 ? 'proposal' : 'proposals'}
+        </span>
       </div>
 
-      {/* Proposal Cards List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div className="proposals-list">
         {filtered.length === 0 ? (
-          <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-dim)' }}>
-            No proposals match the current filter or search criteria.
+          <div className="glass-panel proposals-empty">
+            <h3>{hasFilters ? 'No matching proposals' : 'No proposals yet'}</h3>
+            <p>{hasFilters ? 'Try another search or status filter.' : 'Create a proposal to begin tracking transactions here.'}</p>
+            {hasFilters && (
+              <button className="btn btn-outline" onClick={() => { setSearchQuery(''); setFilterStatus('ALL'); }}>
+                Clear filters
+              </button>
+            )}
           </div>
-        ) : (
-          filtered.map((proposal) => (
-            <ProposalCard
-              key={proposal.id}
-              proposal={proposal}
-              onUpdated={onProposalUpdated}
-              onOpenAudit={onOpenAudit}
-              onOpenDetails={onOpenDetails}
-            />
-          ))
-        )}
+        ) : filtered.map((proposal) => (
+          <ProposalCard key={proposal.id} proposal={proposal}
+            executionMode={executionMode}
+            onUpdated={onProposalUpdated} onOpenAudit={onOpenAudit} onOpenDetails={onOpenDetails} />
+        ))}
       </div>
-    </div>
+    </section>
   );
 };

@@ -6,6 +6,7 @@ Prevents stack traces, secrets, and internal details from leaking.
 """
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
 
@@ -40,6 +41,7 @@ def register_error_handlers(app: FastAPI) -> None:
             },
         )
 
+    @app.exception_handler(RequestValidationError)
     @app.exception_handler(PydanticValidationError)
     async def handle_validation_error(
         request: Request, exc: PydanticValidationError
@@ -78,10 +80,9 @@ def register_error_handlers(app: FastAPI) -> None:
         """
         cid = correlation_id_var.get()
         logger.error(
-            "Unexpected error (correlation_id=%s): %s",
+            "Unexpected error (correlation_id=%s, type=%s)",
             cid,
-            str(exc),
-            exc_info=True,
+            type(exc).__name__,
         )
         return JSONResponse(
             status_code=500,

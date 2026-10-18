@@ -1,183 +1,138 @@
-import React, { useState } from 'react';
-import { Shield, Key, RefreshCw } from 'lucide-react';
-import { api } from '../api/client.ts';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { RefreshCw } from 'lucide-react';
+import { api, credentialRoleLabels, KiteShieldAPIError } from '../api/client.ts';
+import { useConnectedRoles } from '../useCredentials.ts';
 import type { BackendHealth } from '../types/index.ts';
+import type { CredentialRole } from '../api/client.ts';
 
 interface HeaderProps {
   health: BackendHealth | null;
+  title: string;
   onRefreshAll: () => void;
   loading: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ health, onRefreshAll, loading }) => {
+export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loading }) => {
+  const connectedRoles = useConnectedRoles();
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [keyInput, setKeyInput] = useState(api.getApiKey());
+  const [credentialRole, setCredentialRole] = useState<CredentialRole>('proposer');
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const credentialNames = { proposer: 'API_KEY', approver: 'APPROVER_API_KEY', policyAdmin: 'POLICY_ADMIN_API_KEY', demoAdmin: 'DEMO_ADMIN_API_KEY' };
+  const credentialFile = credentialRole === 'demoAdmin' ? 'backend/.env.demo' : 'backend/.env';
+  const keyDialog = useRef<HTMLDialogElement>(null);
+  const keyButton = useRef<HTMLButtonElement>(null);
+  const verifiedLive = health?.execution_mode === 'sepolia'
+    && health.verified_chain_id === 11155111
+    && typeof health.verified_block_number === 'number'
+    && Number.isSafeInteger(health.verified_block_number)
+    && health.verified_block_number >= 0;
 
-  const handleSaveKey = (e: React.FormEvent) => {
-    e.preventDefault();
-    api.setApiKey(keyInput);
+  useEffect(() => {
+    if (showKeyModal) keyDialog.current?.showModal();
+  }, [showKeyModal]);
+
+  const closeKeyDialog = () => {
+    if (savingKey) return;
     setShowKeyModal(false);
-    onRefreshAll();
+    keyButton.current?.focus();
+  };
+
+  const handleSaveKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingKey(true);
+    setKeyError(null);
+    try {
+      await api.verifyAndSaveRoleKey(credentialRole, keyInput);
+      setShowKeyModal(false);
+      keyButton.current?.focus();
+      onRefreshAll();
+    } catch (error) {
+      setKeyError(error instanceof KiteShieldAPIError && error.code === 'CREDENTIAL_ROLE_MISMATCH'
+        ? 'This key belongs to a different role. Select its matching role; the previous credential was not replaced.'
+        : error instanceof KiteShieldAPIError && error.status === 401
+        ? `Key not accepted. Use the value of ${credentialNames[credentialRole]} from ${credentialFile}, without the variable name or surrounding quotes.`
+        : error instanceof KiteShieldAPIError && error.code === 'DEMO_ADMIN_SIMULATION_ONLY'
+        ? 'Demo administrator is disabled here. Start the isolated .env.demo simulation profile; this credential never grants live Sepolia access.'
+        : 'Could not verify this credential. Check that the backend is running, then retry. No saved key was replaced.');
+    } finally {
+      setSavingKey(false);
+    }
   };
 
   return (
-    <header
-      style={{
-        borderBottom: '1px solid var(--border-light)',
-        padding: '16px 24px',
-        background: 'rgba(8, 12, 20, 0.95)',
-        backdropFilter: 'blur(12px)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: '1440px',
-          margin: '0 auto',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
-        {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '12px',
-              background: 'linear-gradient(135deg, #00f2fe 0%, #4facfe 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'var(--glow-cyan)',
-            }}
-          >
-            <Shield size={24} color="#040915" strokeWidth={2.5} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.02em' }}>
-                KiteShield Wallet
-              </h1>
-              <span
-                style={{
-                  fontSize: '0.65rem',
-                  fontWeight: 700,
-                  background: 'rgba(0, 242, 254, 0.15)',
-                  color: 'var(--color-cyan)',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(0, 242, 254, 0.3)',
-                }}
-              >
-                TESTNET MVP
-              </span>
-            </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Give the agent hands, not the keys &bull; Sepolia (11155111)
-            </p>
-          </div>
+    <header className="workspace-header">
+      <h1>{title}</h1>
+      <div className="workspace-controls">
+        <span className={`execution-mode${verifiedLive ? ' execution-mode-live' : ''}`} role="status"
+          title={verifiedLive ? `RPC verified at startup (${health?.rpc_verified_at ?? 'time unavailable'}); block is the latest observed at startup.` : undefined}>
+          {!health ? 'Execution mode unavailable' : verifiedLive ? `Sepolia · chain 11155111 · block ${health.verified_block_number}` : health.execution_mode === 'simulated' ? 'Simulation · no on-chain broadcast' : 'Execution mode unverified'}
+        </span>
+        {!health && <span className="connection-warning" role="status">Connection unavailable</span>}
+        <button className="btn btn-outline" onClick={onRefreshAll} disabled={loading} aria-label="Refresh data">
+          <RefreshCw size={15} aria-hidden="true" />
+          <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
+        </button>
+        <div className="credential-controls" aria-label="Connected credentials">
+        <button
+          ref={keyButton}
+          className="btn btn-outline"
+          onClick={() => { setKeyError(null); setKeyInput(api.getRoleKey(credentialRole)); setShowKeyModal(true); }}
+        >
+          API key
+        </button>
+        <div className="credential-status" role="status" aria-live="polite">
+          <span>{connectedRoles.length ? 'Connected roles' : 'Not authenticated'}</span>
+          {connectedRoles.length > 0 && <strong>{connectedRoles.map(role => credentialRoleLabels[role]).join(' · ')}</strong>}
         </div>
-
-        {/* Status Badges & Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          {/* Health indicator */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              background: health ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)',
-              border: `1px solid ${health ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
-              fontSize: '0.8rem',
-            }}
-          >
-            <span
-              className="pulse-indicator"
-              style={{ background: health ? 'var(--color-emerald)' : 'var(--color-rose)' }}
-            />
-            <span style={{ color: health ? '#34d399' : '#fb7185', fontWeight: 600 }}>
-              {health ? 'Backend Healthy' : 'Disconnected'}
-            </span>
-          </div>
-
-          {/* Signer address pill */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              background: 'var(--bg-subtle)',
-              border: '1px solid var(--border-light)',
-              fontSize: '0.8rem',
-              color: 'var(--text-muted)',
-            }}
-            title="Isolated Signer Key (Testnet Sepolia only)"
-          >
-            <Shield size={14} color="var(--color-cyan)" />
-            <span className="font-mono" style={{ color: 'var(--text-main)', fontSize: '0.78rem' }}>
-              0x25a4...3e09
-            </span>
-          </div>
-
-          {/* Refresh button */}
-          <button
-            className="btn btn-outline"
-            style={{ padding: '8px 12px' }}
-            onClick={onRefreshAll}
-            disabled={loading}
-            title="Refresh All Data"
-          >
-            <RefreshCw size={15} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-          </button>
-
-          {/* API Key Modal Button */}
-          <button
-            className="btn btn-outline"
-            style={{ padding: '8px 12px' }}
-            onClick={() => setShowKeyModal(true)}
-            title="Configure API Key"
-          >
-            <Key size={15} />
-            <span style={{ fontSize: '0.8rem' }}>API Key</span>
-          </button>
+        <button className="btn btn-outline"
+          onClick={() => { setKeyError(null); setKeyInput(api.getRoleKey(credentialRole)); setShowKeyModal(true); }}>
+          Switch role
+        </button>
         </div>
       </div>
 
       {/* Key Modal */}
-      {showKeyModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0, 0, 0, 0.75)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '16px',
-          }}
+      {showKeyModal && createPortal(
+        <dialog
+          ref={keyDialog}
+          className="api-key-dialog"
+          aria-labelledby="api-key-title"
+          onCancel={(event) => { event.preventDefault(); closeKeyDialog(); }}
         >
           <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <Key size={20} color="var(--color-cyan)" />
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>API Authentication</h3>
+              <h3 id="api-key-title" style={{ fontSize: '1.1rem', fontWeight: 600 }}>API Authentication</h3>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Enter the backend <code className="font-mono">X-API-Key</code>. Saved in your browser session for direct API communication.
+              Multiple roles can stay connected and view data. Proposer creates, evaluates, and submits proposals; Human approver approves or rejects; Policy administrator changes policies. Keys and verified roles stay in memory until reload. Never enter a private signing key or emergency-stop key.
+              {' '}Demo administrator combines these permissions only in the separate simulation database, never live Sepolia.
             </p>
             <form onSubmit={handleSaveKey}>
+              <label htmlFor="credential-role">Credential role</label>
+              <select id="credential-role" value={credentialRole} disabled={savingKey} style={{ width: '100%', marginBottom: '12px', padding: '10px' }}
+                onChange={(event) => {
+                  const role = event.target.value as typeof credentialRole;
+                  setCredentialRole(role);
+                  setKeyError(null);
+                  setKeyInput(api.getRoleKey(role));
+                }}>
+                <option value="proposer">Proposer</option>
+                <option value="approver">Human approver</option>
+                <option value="policyAdmin">Policy administrator</option>
+                <option value="demoAdmin">Demo administrator (simulation only)</option>
+              </select>
+              <p style={{ marginBottom: '10px', fontSize: '.85rem', color: 'var(--text-muted)' }}>
+                Use {credentialNames[credentialRole]} from {credentialFile}. The backend must verify this exact role before it is connected.
+              </p>
               <input
-                type="text"
+                type="password"
+                aria-label="Application API key"
+                autoComplete="off"
+                autoFocus
+                disabled={savingKey}
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
                 placeholder="Enter API Key"
@@ -187,27 +142,29 @@ export const Header: React.FC<HeaderProps> = ({ health, onRefreshAll, loading })
                   borderRadius: '8px',
                   background: 'var(--bg-input)',
                   border: '1px solid var(--border-light)',
-                  color: '#fff',
+                  color: 'var(--text-main)',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.85rem',
                   marginBottom: '20px',
                 }}
               />
+              {keyError && <p role="alert" style={{ color: '#a32e3c', marginBottom: '16px' }}>{keyError}</p>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
                   type="button"
                   className="btn btn-outline"
-                  onClick={() => setShowKeyModal(false)}
+                  onClick={closeKeyDialog}
+                  disabled={savingKey}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Save Key
+                <button type="submit" className="btn btn-primary" disabled={savingKey || !keyInput.trim()}>
+                  {savingKey ? 'Verifying…' : credentialRole === 'proposer' ? 'Verify & connect' : 'Verify & save'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </dialog>, document.body
       )}
 
       <style>{`

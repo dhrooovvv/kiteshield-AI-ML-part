@@ -18,7 +18,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import correlation_id_var, get_logger
-from app.core.security import verify_api_key
+from app.core.security import require_policy_admin, verify_api_key
 from app.db import get_db_session
 from app.exceptions import NotFoundError
 from app.models import Policy
@@ -29,6 +29,7 @@ from app.schemas import (
     PolicyUpdateRequest,
 )
 from app.services.audit import AuditService
+from app.services.execution_lock import lock_execution
 
 logger = get_logger("routes.policies")
 router = APIRouter(prefix="/policies", tags=["Policies"])
@@ -56,9 +57,10 @@ def _model_to_response(policy: Policy) -> PolicyResponse:
 async def create_policy(
     request: PolicyCreateRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    _: Annotated[str, Depends(verify_api_key)],
+    actor: Annotated[str, Depends(require_policy_admin)],
 ) -> APIResponse:
     """Create a new policy version and set it as active."""
+    await lock_execution(session)
     cid = correlation_id_var.get()
 
     # Determine next version
@@ -94,7 +96,7 @@ async def create_policy(
         session=session,
         event_type="POLICY_CREATED",
         correlation_id=cid,
-        actor="admin",
+        actor=actor,
         details={
             "policy_id": new_policy.id,
             "version": new_policy.version,
@@ -147,9 +149,10 @@ async def update_policy(
     policy_id: str,
     request: PolicyUpdateRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    _: Annotated[str, Depends(verify_api_key)],
+    actor: Annotated[str, Depends(require_policy_admin)],
 ) -> APIResponse:
     """Update a policy by creating a new version with the updated parameters."""
+    await lock_execution(session)
     cid = correlation_id_var.get()
     existing_stmt = select(Policy).where(Policy.id == policy_id)
     existing_res = await session.execute(existing_stmt)
@@ -178,23 +181,27 @@ async def update_policy(
     )
 
     new_allowed = (
-        request.allowed_recipients if request.allowed_recipients is not None else existing_allowed
+        request.allowed_recipients
+        if "allowed_recipients" in request.model_fields_set
+        else existing_allowed
     )
     new_blocked = (
-        request.blocked_recipients if request.blocked_recipients is not None else existing_blocked
+        request.blocked_recipients
+        if "blocked_recipients" in request.model_fields_set
+        else existing_blocked
     )
 
     new_policy = Policy(
         version=next_ver,
         max_amount_wei=request.max_amount_wei or existing.max_amount_wei,
         daily_limit_wei=request.daily_limit_wei
-        if request.daily_limit_wei is not None
+        if "daily_limit_wei" in request.model_fields_set
         else existing.daily_limit_wei,
         allowed_recipients=json.dumps(new_allowed) if new_allowed else None,
         blocked_recipients=json.dumps(new_blocked) if new_blocked else None,
         escalation_threshold_wei=(
             request.escalation_threshold_wei
-            if request.escalation_threshold_wei is not None
+            if "escalation_threshold_wei" in request.model_fields_set
             else existing.escalation_threshold_wei
         ),
         is_active=True,
@@ -206,7 +213,7 @@ async def update_policy(
         session=session,
         event_type="POLICY_UPDATED",
         correlation_id=cid,
-        actor="admin",
+        actor=actor,
         details={
             "previous_policy_id": existing.id,
             "new_policy_id": new_policy.id,
