@@ -220,6 +220,22 @@ docs/                     Technical handoffs, evidence and presentation material
 
 Further reading: [autonomous payments](docs/AUTONOMOUS_PAYMENTS.md), [portfolio semantics](docs/PORTFOLIO.md), [screening-counter behavior](docs/SCREENING_COUNTER_FIX_2026-10-18.md), [team workflow](docs/TEAM_WORKFLOW.md). Older architecture/API planning documents are background material; use current code and focused implementation handoffs for exact behavior.
 
+## Treasury Autopilot
+
+The **Treasury Autopilot** tab monitors an explicit, versioned Sepolia sweep mandate.
+It is off by default and first activates in **plan-only** mode. Execute activation
+requires a separate administrator confirmation plus the existing global live
+automation configuration. It adds restrictions to the existing policy → capability
+→ logical signer → broadcast → receipt coordinator; it does not replace that path.
+
+GET/Refresh only reads saved status. One-off observations are explicit plan-only
+POSTs. Durable SQLite claims, outstanding-intent blocking, UTC action limits and
+cooldown survive restart and mandate edits. Disabling blocks fresh signing, not
+already-signed transaction recovery.
+
+See [Treasury setup, API, safety boundaries and demo](docs/TREASURY_AUTOPILOT.md).
+No live mandate has been activated or Treasury payment broadcast during development.
+
 ## Competition and license
 
 2026 Shenzhen International FinTechathon · International Track · Topic F: Agent Wallet. The stated deadline is October 20, 2026; confirm submission timing and requirements against the official rules.

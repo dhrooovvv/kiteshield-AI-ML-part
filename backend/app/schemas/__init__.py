@@ -252,6 +252,8 @@ class ProposalResponse(BaseModel):
 
     auto_execution_enabled: bool = False
     auto_execution_max_wei: str = "100000000000000"
+    provenance: str = "AGENT_OR_STRUCTURED"
+    mandate_version: int | None = None
 
     id: str
     correlation_id: str

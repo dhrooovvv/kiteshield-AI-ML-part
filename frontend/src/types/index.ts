@@ -57,6 +57,8 @@ export interface Transaction {
 }
 
 export interface Proposal {
+  provenance?: 'DETERMINISTIC_MANDATE' | 'AGENT_OR_STRUCTURED';
+  mandate_version?: number | null;
   auto_execution_enabled?: boolean;
   auto_execution_max_wei?: string;
   id: string;

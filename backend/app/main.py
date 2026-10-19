@@ -12,8 +12,9 @@ Creates and configures the FastAPI application with:
 This is the single entry point for the backend application.
 """
 
+import asyncio
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,7 +30,9 @@ from app.api.routes import (
     transactions_router,
 )
 from app.api.routes.economics import router as economics_router
+from app.api.routes.mandate_draft import router as mandate_draft_router
 from app.api.routes.portfolio import router as portfolio_router
+from app.api.routes.treasury import router as treasury_router
 from app.core.config import get_settings
 from app.core.live_rpc import verify_live_rpc
 from app.core.logging import correlation_id_var, get_logger, setup_logging
@@ -58,9 +61,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     await init_db()
     logger.info("Database initialized")
 
+    monitor_task = None
+    if settings.treasury_monitor_enabled:
+        from app.db import get_session_factory
+        from app.services.treasury import monitor
+
+        monitor_task = asyncio.create_task(monitor(get_session_factory()), name="treasury-monitor")
+
     try:
         yield
     finally:
+        if monitor_task:
+            monitor_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await monitor_task
         app.state.verified_rpc = None
         logger.info("Shutting down KiteShield Wallet backend")
 
@@ -116,6 +130,8 @@ def create_app() -> FastAPI:
     app.include_router(security_router, prefix="/api/v1")
     app.include_router(economics_router, prefix="/api/v1")
     app.include_router(portfolio_router, prefix="/api/v1")
+    app.include_router(treasury_router, prefix="/api/v1")
+    app.include_router(mandate_draft_router, prefix="/api/v1")
 
     return app
 

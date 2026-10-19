@@ -761,3 +761,80 @@ code, .font-mono {
   .approvals-section-heading { flex-wrap: wrap; gap: 4px; }
 }
 @media (max-width: 600px) { .approvals-section { padding: 20px 16px 12px; } }
+/* Treasury uses the existing flat dashboard language; no execution on refresh. */
+.treasury-page { display: grid; gap: 16px; color: var(--text-main); }
+.treasury-dashboard-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .65fr); grid-template-areas: 'configuration eligibility' 'activity eligibility'; grid-template-rows: auto 1fr; gap: 0; align-items: start; background: #fff; border: 1px solid var(--border-light); border-radius: 20px; overflow: hidden; }
+.treasury-configuration { grid-area: configuration; }
+.treasury-eligibility { grid-area: eligibility; }
+.treasury-actions { grid-area: activity; align-self: stretch; }
+.treasury-configuration, .treasury-eligibility, .treasury-actions { background: #fff; border: 0; border-radius: 0; padding: 24px; min-width: 0; }
+.treasury-actions { border-top: 1px solid var(--border-light); }
+.treasury-configuration header, .treasury-eligibility header, .treasury-action { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.treasury-configuration header > span { color: var(--text-muted); font-size: 14px; white-space: nowrap; }
+.treasury-page h2 { font-size: 22px; margin: 0 0 8px; }
+.treasury-page h3 { font-size: 18px; }
+.treasury-page p { color: var(--text-muted); font-size: 15px; line-height: 1.5; margin: 8px 0; }
+.treasury-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; margin: 20px 0; }
+.treasury-facts dt { color: var(--text-muted); font-size: 14px; margin-bottom: 6px; }
+.treasury-facts dd { margin: 0; font-size: 16px; font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.treasury-page summary { cursor: pointer; }
+.treasury-page summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 3px; }
+.treasury-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.treasury-controls { border-top: 1px solid var(--border-light); padding-top: 16px; }
+.treasury-controls .btn { padding: 9px 12px; min-height: 40px; }
+.treasury-controls ul { padding-left: 20px; font-size: 14px; line-height: 1.6; color: var(--text-muted); }
+.treasury-eligibility { background: #153c2d; color: #fff; align-self: stretch; border-left: 1px solid #355c4b; }
+.treasury-page .treasury-eligibility p { color: #fff; font-size: 14px; }
+.treasury-eligibility h2 { color: #fff; }
+.treasury-eligibility header > strong { font-size: 14px; white-space: nowrap; }
+.treasury-candidate { padding: 16px 0; margin: 12px 0 0; border-top: 1px solid #527563; border-bottom: 1px solid #527563; }
+.treasury-candidate > span { font-size: 15px; }
+.treasury-candidate > strong { display: block; font-size: 28px; line-height: 1.3; font-weight: 600; margin-top: 6px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.treasury-live-facts { margin: 0 0 12px; }
+.treasury-live-facts > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #527563; }
+.treasury-live-facts dt { font-size: 14px; }
+.treasury-live-facts dd { font-size: 15px; font-weight: 600; margin: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.treasury-observation { font-size: 14px; padding: 6px 0; }
+.treasury-eligibility a { color: #fff; text-underline-offset: 3px; }
+.treasury-eligibility summary:focus-visible, .treasury-eligibility a:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.treasury-eligibility ::selection { background: #b9e6ce; color: #153c2d; }
+.treasury-confirm { margin-top: 20px; padding: 20px; background: #f4f7f5; border-radius: 12px; }
+.treasury-confirm .btn { margin: 10px 10px 0 0; }
+.treasury-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.treasury-form h3, .treasury-form p { grid-column: 1 / -1; }
+.treasury-form label { display: grid; gap: 8px; font-size: 15px; }
+.treasury-form input { width: 100%; padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 8px; font: inherit; }
+.treasury-form .btn { justify-self: start; }
+.treasury-action { padding: 16px 0; border-bottom: 1px solid var(--border-light); }
+.treasury-action .btn { flex-shrink: 0; }
+.treasury-actions h2 { font-size: 20px; }
+.treasury-actions .treasury-action { padding: 12px 0; gap: 12px; }
+.treasury-actions .treasury-action strong { font-size: 14px; font-weight: 600; }
+.treasury-actions .treasury-action p { font-size: 13px; margin: 4px 0; }
+.treasury-actions .treasury-action .btn { font-size: 13px; padding: 8px 10px; }
+.treasury-actions > .btn { margin: 12px 8px 0 0; }
+.treasury-history-dialog { position: fixed; inset: 0; margin: auto; width: min(760px, calc(100vw - 32px)); max-height: min(80dvh, 800px); padding: 0; border: 0; border-radius: 16px; overflow: hidden; background: #fff; color: var(--text-main); box-shadow: 0 20px 65px #13201830; }
+.treasury-history-dialog[open] { display: flex; flex-direction: column; }
+.treasury-history-dialog::backdrop { background: #17201c80; }
+.treasury-history-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--border-light); }
+.treasury-history-dialog h2 { margin: 0; font-size: 20px; }
+.treasury-history-body { overflow-y: auto; overscroll-behavior: contain; min-height: 0; padding: 16px 24px 24px; gap: 12px; }
+.treasury-history-body .treasury-action { padding: 12px 0; }
+.treasury-actions .proposal-card { margin-top: 16px; }
+.treasury-history { margin-top: 12px; }
+.treasury-history > summary { padding: 10px 0; font-size: 15px; color: var(--text-muted); }
+.treasury-page .treasury-alert { color: #795316; background: #fff8e9; padding: 12px; border-radius: 8px; }
+@media (max-width: 1000px) {
+  .treasury-dashboard-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'configuration' 'eligibility' 'activity'; grid-template-rows: auto; }
+  .treasury-eligibility { border-left: 0; border-top: 1px solid #355c4b; }
+}
+@media (max-width: 600px) {
+  .treasury-facts, .treasury-form { grid-template-columns: minmax(0, 1fr); }
+  .treasury-configuration, .treasury-eligibility, .treasury-actions { padding: 18px; }
+  .treasury-action { align-items: flex-start; flex-wrap: wrap; }
+}
+
+.treasury-draft { grid-column: 1 / -1; padding: 16px; border: 1px solid #c9ddd3; border-radius: 8px; }
+.treasury-draft textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border: 1px solid #b1c7bb; border-radius: 6px; }
+.treasury-draft p { font-size: 0.875rem; }
+.treasury-draft code { overflow-wrap: anywhere; }

@@ -103,6 +103,7 @@ class Proposal(Base):
     transaction = relationship(
         "Transaction", back_populates="proposal", uselist=False, lazy="selectin"
     )
+    treasury_action = relationship("TreasuryAction", uselist=False, lazy="selectin")
 
 
 class PolicyDecision(Base):
@@ -336,3 +337,7 @@ class ExecutionAttempt(Base):
     __table_args__ = (
         UniqueConstraint("sender", "chain_id", "execution_mode", "nonce", name="uq_sender_nonce"),
     )
+
+
+# Register additive tables on the same metadata, including old-database startup.
+from app.models.treasury import TreasuryAction, TreasuryMandate  # noqa: E402,F401

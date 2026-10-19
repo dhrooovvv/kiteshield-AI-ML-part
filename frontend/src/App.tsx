@@ -14,6 +14,7 @@ import type { BackendHealth, PendingApproval, Policy, Proposal, PromptReviewEven
 import { countHumanAttentionItems } from './dashboardMetrics.ts';
 import { refreshPaymentReceipts } from './paymentReceipts.ts';
 import { PortfolioView } from './views/PortfolioView.tsx';
+import { TreasuryView } from './views/TreasuryView.tsx';
 
 export const App: React.FC = () => {
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
@@ -152,7 +153,7 @@ export const App: React.FC = () => {
         totalProposalsCount={proposals.length}
       />
       <div className="app-main">
-        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} />
+        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio', treasury: 'Treasury Autopilot' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} />
 
       {/* Global error banner if backend is unreachable */}
       {globalError && (
@@ -181,7 +182,7 @@ export const App: React.FC = () => {
 
       {/* Main Content View Container */}
       <main className="content-shell">
-        {currentTab !== 'portfolio' && currentTab !== 'approvals' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
+        {currentTab !== 'portfolio' && currentTab !== 'approvals' && currentTab !== 'treasury' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
         {currentTab === 'overview' && (
           <OverviewView
             blockedAttemptsCount={blockedCount}
@@ -231,6 +232,7 @@ export const App: React.FC = () => {
 
         {currentTab === 'audit' && <AuditView refreshRevision={refreshRevision} />}
         {currentTab === 'portfolio' && <PortfolioView refreshRevision={portfolioRefreshRevision} />}
+        {currentTab === 'treasury' && <TreasuryView refreshRevision={portfolioRefreshRevision} onOpenAudit={setSelectedAuditCid} onOpenDetails={setSelectedProposalForDetails} />}
       </main>
 
       {/* Modals */}

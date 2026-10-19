@@ -37,6 +37,9 @@ async def execute_payment(
     audit: AuditService,
     limits: ExecutionLimits | None = None,
 ) -> Proposal:
+    from app.services.treasury import prepare_authority_context
+
+    await prepare_authority_context(session, proposal_id)
     await lock_execution(session)
     await EmergencyStopService().require_running(session)
     proposal = await session.scalar(

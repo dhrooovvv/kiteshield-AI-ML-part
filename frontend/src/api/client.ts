@@ -1,3 +1,4 @@
+import type { MandateDraftResult } from '../mandateDraft.ts';
 /**
  * KiteShield Wallet — Centralized Typed API Client
  *
@@ -23,6 +24,7 @@ import type {
   Transaction,
 } from '../types/index.ts';
 import type { PortfolioSnapshot } from '../portfolio.ts';
+import type { TreasuryAction, TreasuryConfig, TreasuryStatus } from '../treasury.ts';
 
 export class KiteShieldAPIError extends Error {
   public code: string;
@@ -230,6 +232,30 @@ class APIClient {
   public async getPortfolio(signal?: AbortSignal): Promise<PortfolioSnapshot> {
     return this.request('/portfolio', { signal: signal
       ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : undefined });
+  }
+
+  public draftTreasuryMandate(instruction: string): Promise<MandateDraftResult> {
+    return this.request('/treasury/draft', { method: 'POST',
+      headers: { 'X-API-Key': this.keyForAction('policyAdmin') },
+      body: JSON.stringify({ instruction }) });
+  }
+
+  public getTreasury(): Promise<TreasuryStatus> { return this.request('/treasury'); }
+  public getTreasuryActions(): Promise<TreasuryAction[]> { return this.request('/treasury/actions'); }
+  public saveTreasury(config: TreasuryConfig, expected_version: number): Promise<TreasuryStatus> {
+    return this.request('/treasury/mandate', { method: 'PUT',
+      headers: { 'X-API-Key': this.keyForAction('policyAdmin') },
+      body: JSON.stringify({ ...config, expected_version }) });
+  }
+  public setTreasuryMode(mode: TreasuryStatus['mode'], expected_version: number,
+    confirm_standing_permission = false): Promise<TreasuryStatus> {
+    return this.request('/treasury/mode', { method: 'POST',
+      headers: { 'X-API-Key': this.keyForAction('policyAdmin') },
+      body: JSON.stringify({ mode, expected_version, confirm_standing_permission }) });
+  }
+  public observeTreasury(): Promise<TreasuryStatus> {
+    return this.request('/treasury/observe', { method: 'POST',
+      headers: { 'X-API-Key': this.keyForAction('policyAdmin') } });
   }
   public async checkHealth(): Promise<BackendHealth> {
     return this.request<BackendHealth>('/health');

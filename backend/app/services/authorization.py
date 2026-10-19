@@ -36,6 +36,9 @@ async def validate_authorization(
     approval_id: str | None,
 ) -> None:
     """Never trust a caller's ALLOW/requires_approval claims."""
+    from app.services.treasury import validate_mandate_authority
+
+    await validate_mandate_authority(session, action)
     proposal = await session.get(Proposal, action.proposal_id, populate_existing=True)
     policy = await session.scalar(
         select(Policy).where(Policy.is_active.is_(True)).order_by(Policy.version.desc()).limit(1)

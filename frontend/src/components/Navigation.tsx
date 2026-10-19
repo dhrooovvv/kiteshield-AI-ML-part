@@ -6,9 +6,10 @@ import {
   ShieldCheck,
   History,
   Wallet,
+  Repeat,
 } from 'lucide-react';
 
-export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio';
+export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -32,6 +33,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       icon: <LayoutDashboard size={18} />,
     },
     { id: 'portfolio' as NavTab, label: 'Portfolio', icon: <Wallet size={18} /> },
+    { id: 'treasury' as NavTab, label: 'Treasury Autopilot', icon: <Repeat size={18} /> },
     {
       id: 'proposals' as NavTab,
       label: 'Proposals',

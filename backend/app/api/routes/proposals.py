@@ -136,7 +136,10 @@ def _model_to_proposal_response(p: Proposal) -> ProposalResponse:
     if tx_rec:
         tx_resp = transaction_response(tx_rec)
 
+    treasury_action = p.__dict__.get("treasury_action")
     return ProposalResponse(
+        provenance="DETERMINISTIC_MANDATE" if treasury_action else "AGENT_OR_STRUCTURED",
+        mandate_version=treasury_action.mandate_version if treasury_action else None,
         auto_execution_enabled=(get_settings().auto_execute_enabled
                                 and get_settings().execution_mode == "sepolia"),
         auto_execution_max_wei=str(int(get_settings().auto_execute_max_eth * 10**18)),

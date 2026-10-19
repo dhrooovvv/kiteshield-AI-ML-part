@@ -71,12 +71,35 @@ class Settings(BaseSettings):
     approver_api_key: str = Field(default="", repr=False)
     policy_admin_api_key: str = Field(default="", repr=False)
     demo_admin_api_key: str = Field(default="", repr=False)
+    # Drafting only. Aliases are public addresses configured by the deployment administrator.
+    drafter_recipient_aliases: dict[str, str] = Field(default_factory=dict)
+    drafter_llm_enabled: bool = Field(default=False)
+    drafter_llm_endpoint: str = Field(default="http://127.0.0.1:11434/v1/chat/completions")
+    drafter_llm_model: str = Field(default="local")
+    drafter_llm_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
+
+    @field_validator("drafter_recipient_aliases")
+    @classmethod
+    def drafter_aliases(cls, values: dict[str, str]) -> dict[str, str]:
+        import re
+
+        if len(values) > 20 or any(
+            not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", key)
+            or not re.fullmatch(r"0x[0-9a-fA-F]{40}", value)
+            for key, value in values.items()
+        ):
+            raise ValueError("Use up to 20 lowercase aliases mapped to public ETH addresses")
+        return values
+
     learned_screening_enabled: bool = Field(default=False)
     auto_execute_enabled: bool = Field(default=False)
     auto_execute_max_eth: Decimal = Field(default=Decimal("0.0001"), gt=0, decimal_places=18)
     execution_mode: Literal["simulated", "sepolia"] = Field(default="simulated")
     watched_addresses: list[str] = Field(default_factory=list, max_length=10)
     token_allowlist: list[PortfolioToken] = Field(default_factory=list, max_length=8)
+    treasury_monitor_enabled: bool = Field(default=False)
+    treasury_monitor_interval_seconds: int = Field(default=60, ge=30, le=3600)
+    treasury_claim_seconds: int = Field(default=120, ge=60, le=600)
 
     @field_validator("watched_addresses")
     @classmethod

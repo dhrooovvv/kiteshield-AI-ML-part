@@ -103,6 +103,7 @@ export const ProposalCard: React.FC<ProposalCardProps> = ({
       </dl>
 
       <p className="proposal-card-prompt">{proposal.prompt}</p>
+      {proposal.provenance === 'DETERMINISTIC_MANDATE' && <p className="proposal-card-context">Standing treasury mandate · version {proposal.mandate_version} · not a user-entered prompt</p>}
 
       {proposal.policy_decision && (
         <div className="proposal-card-policy">
