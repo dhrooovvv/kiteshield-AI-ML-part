@@ -223,18 +223,69 @@ Further reading: [autonomous payments](docs/AUTONOMOUS_PAYMENTS.md), [portfolio 
 ## Treasury Autopilot
 
 The **Treasury Autopilot** tab monitors an explicit, versioned Sepolia sweep mandate.
-It is off by default and first activates in **plan-only** mode. Execute activation
-requires a separate administrator confirmation plus the existing global live
-automation configuration. It adds restrictions to the existing policy → capability
-→ logical signer → broadcast → receipt coordinator; it does not replace that path.
+It is off by default and first activates in **plan-only** mode. It computes excess
+above the target balance after a conservative fee reserve, then can initiate a
+bounded sweep through the existing policy → capability → signer → receipt workflow.
+Below-target balances produce a human-refill alert only.
 
-GET/Refresh only reads saved status. One-off observations are explicit plan-only
-POSTs. Durable SQLite claims, outstanding-intent blocking, UTC action limits and
-cooldown survive restart and mandate edits. Disabling blocks fresh signing, not
-already-signed transaction recovery.
+Execute activation requires a separate administrator confirmation and the existing
+global live automation configuration. Durable SQLite claims, outstanding-intent
+blocking, UTC daily action limits and cooldown survive restart and mandate edits.
+Disabling prevents fresh signing; it cannot cancel a signed or broadcast transaction.
+GET/Refresh reads saved status only; explicit one-off observations are plan-only.
 
-See [Treasury setup, API, safety boundaries and demo](docs/TREASURY_AUTOPILOT.md).
-No live mandate has been activated or Treasury payment broadcast during development.
+### Natural-language mandate drafting
+
+**Configure mandate** opens a popup containing the existing settings form and a
+**Draft from instructions** control. A policy administrator can enter:
+
+> Keep 0.04 ETH available, move excess to my saved treasury address, and make no more than three transfers daily.
+
+The drafter returns editable values and questions for missing limits. **Apply draft
+to form** only fills inputs; unspecified limits become blank required fields.
+It never saves a mandate, creates a payment proposal, enables monitoring or executes
+anything. The operator reviews the values, uses **Save disabled mandate**, then
+uses the existing mode controls and separate execution confirmation when intended.
+
+- `POST /api/v1/treasury/draft` requires the policy-administrator role, with the
+  existing isolated-demo administrator exception. It reads policy context but makes
+  no database writes or blockchain RPC calls. Request logging is metadata-only,
+  not a persisted audit-chain event.
+- Recipients resolve only through administrator-configured
+  `DRAFTER_RECIPIENT_ALIASES`; resolved addresses must be explicitly allowlisted,
+  not blocked, and different from the sender. Raw-address instructions and recognized
+  unsupported/authority-changing requests are refused.
+- Amounts use exact integer wei. Sweep limits must respect the global automation
+  cap and policy maximum and remain strictly below the approval threshold.
+  Missing values are not silently defaulted; invalid amounts are not clamped.
+- Canonical instructions use a strict parser. Optional local-model interpretation
+  is behind `DRAFTER_LLM_ENABLED=false` by default, with schema validation and safe
+  failure handling. The model has no execution tools or spending authority.
+
+Example alias configuration (public address only; it must already be allowed by
+that profile's active policy):
+
+```dotenv
+DRAFTER_LLM_ENABLED=false
+DRAFTER_RECIPIENT_ALIASES={"treasury":"0x229D5588641f2614e3F486c853D8BA0eC5FFe811"}
+```
+
+Settings changes require a backend restart. Configuring an alias does not change
+policy or grant execution permission. A restart can resume a previously enabled
+monitor, so review execution settings and saved mandate state first.
+
+The frozen 70-instruction evaluation recorded 15/15 canonical drafts, clarification
+for all 15 paraphrases, and 0/15 malicious false accepts in parser-only mode.
+These are small development-set results, not a production-security guarantee.
+Real LLM-assisted quality and latency remain unverified; no compatible local model
+server was available for that comparison.
+
+The UI also provides compact, expandable audit rows with full metadata and hashes
+available on demand. Verification controls retain their existing semantics.
+
+- [Treasury setup, API, safety boundaries and demo](docs/TREASURY_AUTOPILOT.md)
+- [Drafting setup, workflow and limitations](docs/MANDATE_DRAFTING.md)
+- [Drafting evaluation and confidence intervals](backend/reports/mandate_drafting_v1.md)
 
 ## Competition and license
 
