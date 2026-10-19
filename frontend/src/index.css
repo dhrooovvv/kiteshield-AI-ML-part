@@ -838,3 +838,62 @@ code, .font-mono {
 .treasury-draft textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 10px; border: 1px solid #b1c7bb; border-radius: 6px; }
 .treasury-draft p { font-size: 0.875rem; }
 .treasury-draft code { overflow-wrap: anywhere; }
+
+/* Focused configuration task; the dashboard stays behind the native modal. */
+.treasury-config-dialog { position: fixed; inset: 0; margin: auto; width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--border-light); border-radius: 16px; background: #fff; color: var(--text-main); overflow: hidden; }
+.treasury-config-dialog[open] { display: flex; flex-direction: column; }
+.treasury-config-dialog::backdrop { background: rgb(16 35 27 / 48%); }
+.treasury-config-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 24px; border-bottom: 1px solid var(--border-light); }
+.treasury-config-dialog h2 { margin: 0 0 6px; font-size: 22px; }
+.treasury-config-dialog header p { margin: 0; color: var(--text-muted); font-size: 14px; }
+.treasury-config-body { padding: 0 24px; overflow-y: auto; overscroll-behavior: contain; }
+.treasury-config-body .treasury-form { margin-top: 20px; }
+.treasury-config-footer { grid-column: 1 / -1; position: sticky; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 16px 0; background: #fff; border-top: 1px solid var(--border-light); }
+.treasury-config-footer > span { margin-right: auto; color: var(--text-muted); font-size: 13px; }
+.treasury-config-dialog .treasury-draft { background: #f6faf8; }
+@media (max-width: 600px) {
+  .treasury-config-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); border-radius: 12px; }
+  .treasury-config-dialog > header { padding: 18px 16px; }
+  .treasury-config-body { padding: 0 16px; }
+  .treasury-config-body .treasury-form { grid-template-columns: minmax(0, 1fr); }
+  .treasury-config-footer { flex-wrap: wrap; }
+  .treasury-config-footer > span { flex-basis: 100%; }
+}
+
+.credential-intro { margin: -4px 0 18px; color: var(--text-muted); font-size: .875rem; }
+.credential-role-hint { margin: -4px 0 16px; color: var(--text-muted); font-size: .8125rem; }
+.credential-key-label { display: block; margin-bottom: 6px; }
+.credential-key-warning { margin: 0 0 14px; color: var(--text-muted); font-size: .75rem; line-height: 1.5; }
+.credential-help { margin: 0 0 20px; color: var(--text-muted); font-size: .75rem; }
+.credential-help summary { width: fit-content; cursor: pointer; }
+.credential-help p { margin: 8px 0 0; }
+.credential-help code { overflow-wrap: anywhere; }
+
+.audit-explorer .audit-panel { padding: 22px 24px; }
+.audit-explorer .audit-lookup { margin: 16px 0; }
+.audit-scope { color: var(--text-muted); font-size: .75rem; margin-top: 8px; }
+.audit-scope summary { cursor: pointer; width: fit-content; }
+.audit-scope p { margin: 8px 0 0; max-width: 70ch; }
+.audit-ledger { border-top: 1px solid var(--border-light); }
+.audit-ledger-event { border-bottom: 1px solid var(--border-light); }
+.audit-ledger-event > summary { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(100px, 170px) 100px 16px; align-items: center; gap: 14px; min-height: 48px; padding: 8px; cursor: pointer; list-style: none; }
+.audit-ledger-event > summary::-webkit-details-marker { display: none; }
+.audit-ledger-event > summary:hover { background: var(--bg-subtle); }
+.audit-ledger-event > summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; border-radius: 4px; }
+.audit-ledger-index { color: var(--text-dim); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.audit-ledger-name { font-size: .875rem; font-weight: 600; overflow-wrap: anywhere; }
+.audit-ledger-actor { font-size: .75rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-ledger-event time { text-align: right; color: var(--text-muted); font-size: .75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.audit-ledger-chevron { color: var(--text-muted); transition: transform 150ms ease; }
+.audit-ledger-event[open] > summary .audit-ledger-chevron { transform: rotate(180deg); }
+.audit-ledger-details { padding: 4px 16px 18px 46px; }
+.audit-ledger-fact { display: contents; }
+.audit-ledger-details .audit-facts { font-size: .8125rem; gap: 8px 16px; }
+.audit-ledger-details .font-mono { font-size: .75rem; }
+@media (max-width: 650px) {
+  .audit-explorer .audit-panel { padding: 16px; }
+  .audit-ledger-event > summary { grid-template-columns: 18px minmax(0, 1fr) 88px 14px; gap: 8px; }
+  .audit-ledger-actor { display: none; }
+  .audit-ledger-details { padding-left: 26px; }
+}
+@media (prefers-reduced-motion: reduce) { .audit-ledger-chevron { transition: none; } }

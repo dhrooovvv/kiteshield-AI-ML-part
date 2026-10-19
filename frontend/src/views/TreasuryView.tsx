@@ -54,6 +54,34 @@ export function TreasurySummary({ status, children, latestAction, activity }: { 
   </div>;
 }
 
+export function TreasuryConfigurationDialog({ onClose, busy, children }: {
+  onClose: () => void; busy: boolean; children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const opener = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const element = dialog.current;
+    element?.showModal();
+    return () => {
+      element?.close();
+      document.body.style.overflow = previousOverflow;
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
+  if (typeof document === 'undefined') return null;
+  return createPortal(<dialog ref={dialog} className="treasury-config-dialog"
+    aria-labelledby="treasury-config-title" aria-describedby="treasury-config-description"
+    onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
+    <header><div><h2 id="treasury-config-title">Configure mandate</h2>
+      <p id="treasury-config-description">Review your treasury rules. Saving does not enable execution.</p></div>
+      <button type="button" className="btn btn-outline" disabled={busy} onClick={onClose}
+        aria-label="Close mandate configuration">Close</button></header>
+    <div className="treasury-config-body">{children}</div>
+  </dialog>, document.body);
+}
+
 interface Props { refreshRevision: number; onOpenAudit: (cid: string) => void; onOpenDetails: (p: Proposal) => void }
 
 export function TreasuryActivity({ actions, onOpenAudit, onOpenHistory, showAll = false }: { actions: TreasuryAction[]; onOpenAudit: (cid: string) => void; onOpenHistory?: () => void; showAll?: boolean }) {
@@ -136,7 +164,7 @@ export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Pr
         {!admin && <p>Policy administrator required to configure, observe or activate a mandate.</p>}
         <div className="treasury-buttons">
           <button className="btn btn-outline" onClick={() => void refresh()} disabled={busy}>Refresh status (read-only)</button>
-          <button className="btn btn-outline" disabled={!admin || busy} onClick={() => setEditing(editing === null ? status.mandate?.version ?? 0 : null)}>Configure mandate</button>
+          <button className="btn btn-outline" disabled={!admin || busy} onClick={() => { setError(null); setEditing(status.mandate?.version ?? 0); }}>Configure mandate</button>
           <button className="btn btn-outline" disabled={!admin || busy || !status.mandate} onClick={() => void perform(() => api.setTreasuryMode('plan_only', status.mandate!.version))}>Enable plan-only</button>
           <button className="btn btn-outline" disabled={!admin || busy || status.mode === 'off'} onClick={() => void perform(() => api.observeTreasury())}>Observe once · plan-only</button>
           <button className="btn btn-emerald" aria-describedby="treasury-execute-requirements" disabled={busy || executeBlockers.length > 0} onClick={() => setConfirm(status.mandate!.version)}>Enable execute…</button>
@@ -146,7 +174,9 @@ export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Pr
           {executeBlockers.length > 0 && status.mode !== 'execute' && <><p>Before enabling execute:</p><ul>{executeBlockers.map(reason => <li key={reason}>{reason}</li>)}</ul></>}
         </div>
         {confirm !== null && <div className="treasury-confirm" role="group" aria-label="Confirm standing spending permission"><h3>Grant standing execution permission?</h3><p>This allows unattended sweeps to the designated recipient within this mandate and current policy. Disabling prevents fresh signing but cannot cancel a signed or broadcast transaction.</p>{confirm !== status.mandate?.version && <p role="alert">The mandate changed. Cancel and review its new configuration before confirming.</p>}<button className="btn btn-emerald" disabled={busy || !admin || confirm !== status.mandate?.version || executeBlockers.length > 0} onClick={() => void perform(() => api.setTreasuryMode('execute', confirm, true))}>Confirm standing permission</button><button className="btn btn-outline" disabled={busy} onClick={() => setConfirm(null)}>Cancel</button></div>}
-        {editing !== null && <form ref={formRef} onSubmit={save} className="treasury-form"><h3>Mandate settings</h3><p>Saving disables this mandate and invalidates old unsigned proposals. Cooldown and action history are retained.</p>{editing !== (status.mandate?.version ?? 0) && <p role="alert">The mandate changed. Close configuration and reopen it before saving.</p>}
+        {editing !== null && <TreasuryConfigurationDialog busy={busy} onClose={() => setEditing(null)}>
+        {error && <p role="alert" className="state-panel state-error">{error}</p>}
+        <form ref={formRef} onSubmit={save} className="treasury-form"><p>Saving disables this mandate and invalidates old unsigned proposals. Cooldown and action history are retained.</p>{editing !== (status.mandate?.version ?? 0) && <p role="alert">The mandate changed. Close configuration and reopen it before saving.</p>}
           <MandateDraftBox disabled={!admin || busy || editing !== (status.mandate?.version ?? 0)} onApply={draft => {
             if (formRef.current) applyMandateDraft(formRef.current, draft);
           }} />
@@ -157,8 +187,12 @@ export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Pr
           <label>Cooldown (seconds)<input name="cooldown" type="number" min="60" max="86400" required defaultValue={status.mandate?.cooldown_seconds ?? 600} /></label>
           <label>Maximum actions per UTC day<input name="daily" type="number" min="1" max="100" required defaultValue={status.mandate?.daily_action_limit ?? 3} /></label>
           <label>Observation freshness (seconds)<input name="freshness" type="number" min="15" max="300" required defaultValue={status.mandate?.freshness_seconds ?? 60} /></label>
-          <button className="btn btn-emerald" disabled={busy || !admin || editing !== (status.mandate?.version ?? 0)}>Save disabled mandate</button>
-        </form>}
+          <footer className="treasury-config-footer">
+            <span>{busy ? 'Saving mandate…' : 'Execution requires separate confirmation.'}</span>
+            <button type="button" className="btn btn-outline" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
+            <button className="btn btn-emerald" disabled={busy || !admin || editing !== (status.mandate?.version ?? 0)}>Save disabled mandate</button>
+          </footer>
+        </form></TreasuryConfigurationDialog>}
         {busy && <p role="status">Updating treasury…</p>}
       </section>
       </TreasurySummary>

@@ -21,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
   const [savingKey, setSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
   const credentialNames = { proposer: 'API_KEY', approver: 'APPROVER_API_KEY', policyAdmin: 'POLICY_ADMIN_API_KEY', demoAdmin: 'DEMO_ADMIN_API_KEY' };
+  const roleDescriptions = { proposer: 'Create and submit payment proposals.', approver: 'Approve or reject escalated payments.', policyAdmin: 'Manage security policies and mandates.', demoAdmin: 'Combined access in isolated simulation only.' };
   const credentialFile = credentialRole === 'demoAdmin' ? 'backend/.env.demo' : 'backend/.env';
   const keyDialog = useRef<HTMLDialogElement>(null);
   const keyButton = useRef<HTMLButtonElement>(null);
@@ -51,12 +52,12 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
       onRefreshAll();
     } catch (error) {
       setKeyError(error instanceof KiteShieldAPIError && error.code === 'CREDENTIAL_ROLE_MISMATCH'
-        ? 'This key belongs to a different role. Select its matching role; the previous credential was not replaced.'
+        ? 'This key belongs to another role. Select its matching role and retry.'
         : error instanceof KiteShieldAPIError && error.status === 401
-        ? `Key not accepted. Use the value of ${credentialNames[credentialRole]} from ${credentialFile}, without the variable name or surrounding quotes.`
+        ? 'Key not accepted. Check the selected role and key.'
         : error instanceof KiteShieldAPIError && error.code === 'DEMO_ADMIN_SIMULATION_ONLY'
-        ? 'Demo administrator is disabled here. Start the isolated .env.demo simulation profile; this credential never grants live Sepolia access.'
-        : 'Could not verify this credential. Check that the backend is running, then retry. No saved key was replaced.');
+        ? 'Demo credentials work only in isolated simulation.'
+        : 'Verification failed. Check the connection and retry. Your previous key is unchanged.');
     } finally {
       setSavingKey(false);
     }
@@ -104,14 +105,11 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
         >
           <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <h3 id="api-key-title" style={{ fontSize: '1.1rem', fontWeight: 600 }}>API Authentication</h3>
+              <h3 id="api-key-title" style={{ fontSize: '1.1rem', fontWeight: 600 }}>Connect API key</h3>
             </div>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Multiple roles can stay connected and view data. Proposer creates, evaluates, and submits proposals; Human approver approves or rejects; Policy administrator changes policies. Keys and verified roles stay in memory until reload. Never enter a private signing key or emergency-stop key.
-              {' '}Demo administrator combines these permissions only in the separate simulation database, never live Sepolia.
-            </p>
+            <p className="credential-intro">Choose a role and enter its application key.</p>
             <form onSubmit={handleSaveKey}>
-              <label htmlFor="credential-role">Credential role</label>
+              <label htmlFor="credential-role">Role</label>
               <select id="credential-role" value={credentialRole} disabled={savingKey} style={{ width: '100%', marginBottom: '12px', padding: '10px' }}
                 onChange={(event) => {
                   const role = event.target.value as typeof credentialRole;
@@ -124,10 +122,10 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
                 <option value="policyAdmin">Policy administrator</option>
                 <option value="demoAdmin">Demo administrator (simulation only)</option>
               </select>
-              <p style={{ marginBottom: '10px', fontSize: '.85rem', color: 'var(--text-muted)' }}>
-                Use {credentialNames[credentialRole]} from {credentialFile}. The backend must verify this exact role before it is connected.
-              </p>
+              <p className="credential-role-hint">{roleDescriptions[credentialRole]}</p>
+              <label className="credential-key-label" htmlFor="application-api-key">API key</label>
               <input
+                id="application-api-key"
                 type="password"
                 aria-label="Application API key"
                 autoComplete="off"
@@ -135,7 +133,7 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
                 disabled={savingKey}
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
-                placeholder="Enter API Key"
+                placeholder="Paste application key"
                 style={{
                   width: '100%',
                   padding: '10px 14px',
@@ -145,9 +143,14 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
                   color: 'var(--text-main)',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.85rem',
-                  marginBottom: '20px',
+                  marginBottom: '8px',
                 }}
               />
+              <p className="credential-key-warning">Never enter a wallet private key or emergency-stop key.</p>
+              <details className="credential-help"><summary>Connection details</summary>
+                <p>Use the value of <code>{credentialNames[credentialRole]}</code> from <code>{credentialFile}</code>.</p>
+                <p>Keys stay in memory until reload. Multiple roles can stay connected.</p>
+              </details>
               {keyError && <p role="alert" style={{ color: '#a32e3c', marginBottom: '16px' }}>{keyError}</p>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button
@@ -159,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={savingKey || !keyInput.trim()}>
-                  {savingKey ? 'Verifying…' : credentialRole === 'proposer' ? 'Verify & connect' : 'Verify & save'}
+                  {savingKey ? 'Verifying…' : 'Verify & connect'}
                 </button>
               </div>
             </form>
