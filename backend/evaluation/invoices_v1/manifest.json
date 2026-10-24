@@ -1,0 +1,10 @@
+{
+  "version": "invoices-v1",
+  "synthetic": true,
+  "network": "Sepolia test ETH",
+  "benign": 60,
+  "attack": 60,
+  "clock_utc": "2026-10-24",
+  "sha256": "312dfad7296203eabe192a79021d43a87d04ac0be8f7672105641bd02756f26d",
+  "protocol": "Commit before first evaluation. One run. No post-run tuning on these cases."
+}
