@@ -226,7 +226,11 @@ async def test_gemma_request_has_no_tools_addresses_or_secrets(monkeypatch, tmp_
             return httpx.Response(200, json={"models": [{"name": "gemma3:4b", "digest": "a" * 64}]})
         seen.update(json.loads(request.content))
         return httpx.Response(
-            200, json={"message": {"content": '{"steps":["balance","fund","payment","receipt"]}'}}
+            200,
+            json={
+                "done": True,
+                "message": {"content": '{"steps":["balance","fund","payment","receipt"]}'},
+            },
         )
 
     real_client = httpx.AsyncClient

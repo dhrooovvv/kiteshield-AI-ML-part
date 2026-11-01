@@ -45,6 +45,9 @@ class Settings:
     lease_seconds: float = 30
     model_digest: str = ""
     ollama_version: str = ""
+    workflows_enabled: bool = False
+    quarantine_enabled: bool = False
+    wallet_services_enabled: bool = False
 
 
 class HumanRequiredError(Exception):
@@ -73,7 +76,8 @@ async def gemma_plan(settings: Settings):
                 "model": settings.model,
                 "stream": False,
                 "format": PLAN_SCHEMA,
-                "options": {"temperature": 0},
+                "think": False,
+                "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 128},
                 "messages": [
                     {
                         "role": "user",
@@ -84,7 +88,10 @@ async def gemma_plan(settings: Settings):
             },
         )
         response.raise_for_status()
-        return json.loads(response.json()["message"]["content"])
+        payload = response.json()
+        if not payload.get("done") or payload["message"].get("tool_calls"):
+            raise HumanRequiredError("PLANNER_INCOMPLETE_OR_TOOL_CALL")
+        return json.loads(payload["message"]["content"])
 
 
 class Engine:
