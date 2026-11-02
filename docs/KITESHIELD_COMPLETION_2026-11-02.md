@@ -51,7 +51,7 @@ has not received an independent audit and is not approved for mainnet.
 
 - Full backend suite: **766 passed, 14 skipped**. Skips are opt-in live
   Horizon/Bastion model checks. Final scoped changes were checked separately by
-  the **29-test vault suite**.
+  the **30-test vault suite**.
 - Frontend: **89 passed**; production build and lint passed.
 - Foundry: **13 passed**, including 256 cap fuzz cases.
 - No new full-suite runs or extra live payments are required for this report.

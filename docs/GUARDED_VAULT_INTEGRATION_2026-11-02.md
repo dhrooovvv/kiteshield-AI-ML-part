@@ -63,7 +63,7 @@ describe why contract creation can require more gas; that is an explanation
 consistent with these observations, not an independent attestation of this RPC's fork configuration.
 
 - Full backend run before owner-cap adjustment: 766 passed, 14 opt-in live-model
-  tests skipped. After the owner-cap adjustment and independent owner-pause control, all 29 vault tests passed.
+  tests skipped. After the owner-cap adjustment and independent owner-pause control, all 30 vault tests passed.
 - Frontend: 89 passed; production build and lint checked.
 - Solidity: 13 passed, including 256 cap fuzz cases, owner-only recovery,
   replay/stale epoch rejection, tightening, pause/resume, and deposits.

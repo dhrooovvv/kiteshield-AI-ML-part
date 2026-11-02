@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime
 
 from eth_abi import decode
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 from web3 import Web3
 
@@ -40,7 +40,10 @@ async def prepare_operation(session, op, blockchain):
         select(ExecutionAttempt.id)
         .where(
             ExecutionAttempt.sender == op.sender,
-            ExecutionAttempt.execution_mode == "sepolia",
+            or_(
+                ExecutionAttempt.execution_mode == "sepolia",
+                ExecutionAttempt.execution_mode.is_(None),
+            ),
             ExecutionAttempt.status.in_(PENDING),
         )
         .limit(1)

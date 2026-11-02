@@ -713,3 +713,27 @@ async def test_owner_can_pause_without_agent_gas_but_proposer_cannot_impersonate
     op.authorized_by = "proposer"
     with pytest.raises(SigningRejectedError, match="administrator"):
         await validate_operation(vault.session, op, BlockchainService())
+
+
+@pytest.mark.asyncio
+async def test_legacy_unknown_execution_blocks_vault_nonce_allocation(vault):
+    from app.models import ExecutionAttempt
+    from app.services.vault_execution import prepare_operation
+
+    proposal, op, _ = await payment(vault, prepared=False)
+    vault.session.add(
+        ExecutionAttempt(
+            proposal_id=proposal.id,
+            sender=op.sender,
+            chain_id=11155111,
+            nonce=0,
+            envelope="{}",
+            policy_version=1,
+            status="SIGNED",
+            execution_mode=None,
+        )
+    )
+    await vault.session.commit()
+    with pytest.raises(SigningRejectedError, match="pending execution"):
+        await prepare_operation(vault.session, op, BlockchainService())
+    assert op.nonce is None and op.raw_transaction is None
