@@ -47,11 +47,17 @@ proposal is enforced by the backend signer, not independently by this contract.
 Keys remain in one backend process with logical separation. The implementation
 has not received an independent audit and is not approved for mainnet.
 
+Automatic escrow funding is separately off by default. Activation requires
+`AUTONOMY_VAULT_FUNDING_ENABLED`, the exact deployed vault in `WATCHED_ADDRESSES`,
+the existing configured faucet, CDP credentials, a grant ceiling and a funding
+budget. The agent cannot register a target or increase its allowance. A funded
+owner balance is not mistaken for vault escrow; existing unknown requests are
+reconciled even when escrow becomes sufficient. Agent gas remains an administrator grant.
+
 ## Verification and evidence
 
-- Full backend suite: **766 passed, 14 skipped**. Skips are opt-in live
-  Horizon/Bastion model checks. Final scoped changes were checked separately by
-  the **30-test vault suite**.
+- Full backend suite: **771 passed, 14 skipped**, including all **32 vault tests**.
+  Skips are opt-in live Horizon/Bastion model checks.
 - Frontend: **89 passed**; production build and lint passed.
 - Foundry: **13 passed**, including 256 cap fuzz cases.
 - No new full-suite runs or extra live payments are required for this report.

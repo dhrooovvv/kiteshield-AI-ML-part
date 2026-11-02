@@ -718,6 +718,7 @@ async def test_owner_can_pause_without_agent_gas_but_proposer_cannot_impersonate
 @pytest.mark.asyncio
 async def test_legacy_unknown_execution_blocks_vault_nonce_allocation(vault):
     from sqlalchemy import text
+
     from app.models import ExecutionAttempt
     from app.services.vault_execution import prepare_operation
 
@@ -748,3 +749,109 @@ async def test_legacy_unknown_execution_blocks_vault_nonce_allocation(vault):
     with pytest.raises(SigningRejectedError, match="pending execution"):
         await prepare_operation(vault.session, op, BlockchainService())
     assert op.nonce is None and op.raw_transaction is None
+
+
+@pytest.mark.asyncio
+async def test_vault_faucet_uses_only_admin_registered_target_and_never_owner_balance(vault):
+    from demo_autonomy.engine import HumanRequiredError
+    from demo_autonomy.vault_adapter import VaultWalletAdapter
+
+    adapter = object.__new__(VaultWalletAdapter)
+    adapter.settings = vault.settings
+    adapter.address = vault.registry.owner
+    adapter.engine = SimpleNamespace(task_context=lambda _: {"backend": "VAULT", "address": VAULT})
+    adapter.authority = SimpleNamespace(max_payment_fee_wei=1000)
+
+    async def state(_):
+        return {"balance": 3}
+
+    async def forbidden_owner_balance():
+        raise AssertionError("Vault funding must not use the owner's balance")
+
+    adapter.vault_status_for_task = state
+    adapter.balance = forbidden_owner_balance
+    task = {"id": "vault-task", "amount": 10}
+    with pytest.raises(HumanRequiredError, match="ADMIN_VAULT_ESCROW_REQUIRED"):
+        await adapter.require_vault_funding_target(task)
+    vault.monkeypatch.setattr(vault.settings, "autonomy_vault_funding_enabled", True)
+    with pytest.raises(HumanRequiredError, match="ADMIN_VAULT_FAUCET_TARGET_REQUIRED"):
+        await adapter.require_vault_funding_target(task)
+    vault.monkeypatch.setattr(vault.settings, "watched_addresses", [VAULT])
+    await adapter.require_vault_funding_target(task)
+    assert adapter.funding_address(task) == VAULT
+    assert await adapter.funding_balance(task) == 3
+    assert adapter.funding_requirement(task) == 10
+
+
+@pytest.mark.asyncio
+async def test_vault_funding_reuses_budget_cooldown_and_reconciles_existing_request(
+    vault, tmp_path
+):
+    from demo_autonomy.engine import HumanRequiredError, Settings
+    from demo_autonomy.main_wallet import MainAuthority, MainWorkflowEngine
+    from demo_autonomy.vault_adapter import VaultWalletAdapter
+
+    vault.monkeypatch.setattr(vault.settings, "autonomy_vault_funding_enabled", True)
+    vault.monkeypatch.setattr(vault.settings, "watched_addresses", [VAULT])
+    authority = MainAuthority(
+        True, RECIPIENT.lower(), 1000, 100, 1000, 100, 100, 100000, 10, 1, True
+    )
+    engine = MainWorkflowEngine(
+        Settings(
+            tmp_path / "tasks",
+            enabled=True,
+            planner_enabled=True,
+            workflows_enabled=True,
+            quarantine_enabled=True,
+            mode="SEPOLIA",
+        ),
+        authority,
+    )
+    engine.initialize()
+    engine.context_for_new_task = lambda: {
+        "backend": "VAULT",
+        "address": VAULT,
+        "epoch": 1,
+        "revision": 2,
+    }
+    engine.configure("Acme", RECIPIENT, 1000, 100)
+    task_id = engine.create(
+        "fund if needed, pay supplier Acme 10 wei, verify", "vault_fund_fixture"
+    )
+
+    async def planner(_):
+        return {"steps": ["balance", "fund", "payment", "receipt"]}
+
+    await engine.plan(task_id, planner)
+    task = engine.get(task_id)
+    adapter = object.__new__(VaultWalletAdapter)
+    adapter.engine, adapter.settings, adapter.authority = engine, vault.settings, authority
+    adapter.address = vault.registry.owner
+    state = dict(remaining=100, balance=0, agent_balance=100)
+    link = {"funding_started": 0}
+    observed = []
+
+    async def observe(_):
+        return state.copy()
+
+    async def fund(_task, tool, key, *, reconcile=False):
+        assert tool == "fund" and adapter.funding_address(task) == VAULT
+        observed.append(reconcile)
+        link["funding_started"] = 1
+        state["balance"] = 90
+        return {"tool": "fund", "mode": "SEPOLIA", "funded_wei": 90, "tx_hash": "0x" + "a" * 64}
+
+    adapter.vault_status_for_task, adapter.link, adapter.run = observe, lambda _: link.copy(), fund
+    first = await engine.fund(task, task_id + ":1", adapter, False)
+    second = await engine.fund(task, task_id + ":1", adapter, True)
+    assert first["funded_wei"] == second["funded_wei"] == 90
+    assert observed == [False, True]  # A now-sufficient balance cannot hide unknown funding.
+    with engine.db() as db:
+        assert db.execute("SELECT count(*),sum(amount) FROM funding_claims").fetchone()[:] == (
+            1,
+            100,
+        )
+    state["remaining"] = 0
+    with pytest.raises(HumanRequiredError, match="ADMIN_VAULT_ALLOWANCE_REQUIRED"):
+        await engine.fund(task, task_id + ":1", adapter, True)
+    assert len(observed) == 2  # Incoming ETH cannot grant an allowance.

@@ -117,8 +117,8 @@ class SepoliaWorkflowEngine(WorkflowEngine):
         # Once requested, always reconcile the exact request, even if the wallet
         # now has enough ETH; otherwise recovery could hide an unknown delivery.
         if not link["funding_started"]:
-            balance = await adapter.balance()
-            required = task["amount"] + self.authority.max_payment_fee_wei
+            balance = await adapter.funding_balance(task)
+            required = adapter.funding_requirement(task)
             if balance >= required:
                 return {
                     "tool": "fund",
@@ -509,6 +509,15 @@ class SepoliaAdapter(WalletServicesAdapter):
         result["proposal_id"] = proposal
         return result
 
+    async def funding_balance(self, task):
+        return await self.balance()
+
+    def funding_requirement(self, task):
+        return task["amount"] + self.authority.max_payment_fee_wei
+
+    def funding_address(self, task):
+        return self.address
+
     async def fund(self, task, reconcile=False):
         link = self.link(task["id"])
         if not link["funding_id"]:
@@ -518,13 +527,19 @@ class SepoliaAdapter(WalletServicesAdapter):
             answer = await self.call(
                 "POST",
                 "/funding/plan",
-                data={"prompt": "Fund my wallet with Sepolia test ETH", "address": self.address},
+                data={
+                    "prompt": "Fund my wallet with Sepolia test ETH",
+                    "address": self.funding_address(task),
+                },
             )
             self.save(task["id"], "funding_id", answer["id"])
             link = self.link(task["id"])
         answer = await self.call("POST", f"/funding/{link['funding_id']}/request")
         # The existing adapter owns one POST, cooldown, and unknown-delivery lock.
         answer = await self.call("GET", f"/funding/{link['funding_id']}")
+        if (answer.get("address") or "").lower() != self.funding_address(task).lower():
+            self.engine.issue(task["id"], "FUNDING_TARGET_MISMATCH", anomaly=True)
+            raise HumanRequiredError("FUNDING_TARGET_MISMATCH")
         if answer["state"] == "SUBMITTED":
             raise WaitingError("FUNDING_RECEIPT_PENDING")
         if answer["state"] != "CONFIRMED" or answer["mode"] != "sepolia":

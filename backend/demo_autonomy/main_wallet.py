@@ -115,10 +115,13 @@ class MainWorkflowEngine(SepoliaWorkflowEngine):
             return await super().fund(task, key, adapter, reconcile)
         # Owner deposits and gas grants are administrator actions, not funding tools.
         state = await adapter.vault_status_for_task(task)
-        if min(state["remaining"], state["balance"]) < task["amount"]:
-            raise HumanRequiredError("ADMIN_VAULT_ESCROW_REQUIRED")
+        if state["remaining"] < task["amount"]:
+            raise HumanRequiredError("ADMIN_VAULT_ALLOWANCE_REQUIRED")
         if state["agent_balance"] <= 0:
             raise HumanRequiredError("ADMIN_AGENT_GAS_REQUIRED")
+        if adapter.link(task["id"])["funding_started"] or state["balance"] < task["amount"]:
+            await adapter.require_vault_funding_target(task)
+            return await super().fund(task, key, adapter, reconcile)
         return {
             "tool": "fund",
             "mode": "SEPOLIA",

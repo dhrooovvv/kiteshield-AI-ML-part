@@ -10,6 +10,32 @@ from demo_autonomy.sandbox import WaitingError
 
 
 class VaultWalletAdapter(MainWalletAdapter):
+    async def require_vault_funding_target(self, task):
+        from app.services.funding import wallets
+
+        if not self.settings.autonomy_vault_funding_enabled:
+            raise HumanRequiredError("ADMIN_VAULT_ESCROW_REQUIRED")
+        target = self.engine.task_context(task["id"])["address"]
+        if target.lower() not in {wallet["address"].lower() for wallet in wallets()}:
+            raise HumanRequiredError("ADMIN_VAULT_FAUCET_TARGET_REQUIRED")
+
+    async def funding_balance(self, task):
+        if self.is_vault(task):
+            return (await self.vault_status_for_task(task))["balance"]
+        return await super().funding_balance(task)
+
+    def funding_requirement(self, task):
+        if self.is_vault(task):
+            return task["amount"]  # Gas is paid by the separately bounded agent.
+        return super().funding_requirement(task)
+
+    def funding_address(self, task):
+        if self.is_vault(task):
+            if not self.settings.autonomy_vault_funding_enabled:
+                raise HumanRequiredError("VAULT_FUNDING_DISABLED")
+            return self.engine.task_context(task["id"])["address"]
+        return super().funding_address(task)
+
     async def initialize(self):
         await super().initialize()
         if self.settings.vault_quarantine_pause_enabled:

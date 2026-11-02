@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     local_voice_timeout_seconds: int = Field(default=30, ge=1, le=60)
     vault_enabled: bool = False
     autonomy_vault_payments_enabled: bool = False
+    autonomy_vault_funding_enabled: bool = False
     vault_quarantine_pause_enabled: bool = False
     vault_agent_key_file: str = ""
     vault_agent_address: str = ""

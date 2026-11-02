@@ -25,6 +25,12 @@ reduce allowance/cap/expiry, or pause. Neither incoming transfers nor token/NFT
 events update these grants. Recovery pauses and advances the epoch. Configuring
 a session does not clear an on-chain pause. Only the administrator can resume.
 
+Optional automatic escrow funding uses only the existing configured faucet
+adapter, its cooldown and the task's funding budget. The vault must be explicitly
+registered in the administrator's watched-address configuration and a separate
+flag must be enabled. The funding target is the frozen vault, not the owner's
+wallet; grants never increase on incoming ETH. Agent gas still requires an owner grant.
+
 Each new task freezes its payment method and vault grant. Historical native tasks
 remain native; restart or a new grant never retargets an old task. Payout policy
 and human-approval digests bind the complete typed vault operation. Native
@@ -62,8 +68,9 @@ and [Foundation developer note](https://blog.ethereum.org/2026/08/24/glamsterdam
 describe why contract creation can require more gas; that is an explanation
 consistent with these observations, not an independent attestation of this RPC's fork configuration.
 
-- Full backend run before owner-cap adjustment: 766 passed, 14 opt-in live-model
-  tests skipped. After the owner-cap adjustment and independent owner-pause control, all 30 vault tests passed.
+- Final full backend run: 771 passed, 14 opt-in live-model tests skipped,
+  including all 32 vault tests after the owner-cap, owner-pause, legacy nonce
+  and configured-faucet integration changes.
 - Frontend: 89 passed; production build and lint checked.
 - Solidity: 13 passed, including 256 cap fuzz cases, owner-only recovery,
   replay/stale epoch rejection, tightening, pause/resume, and deposits.

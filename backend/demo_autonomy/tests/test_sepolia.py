@@ -381,6 +381,7 @@ async def test_faucet_receipt_records_actual_grant_not_reserved_ceiling(adapter)
         return {
             "id": "funding",
             "state": "CONFIRMED",
+            "address": adapter.address,
             "mode": "sepolia",
             "amount_wei": "90",
             "tx_hash": TX,
