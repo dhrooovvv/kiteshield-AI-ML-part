@@ -717,6 +717,7 @@ async def test_owner_can_pause_without_agent_gas_but_proposer_cannot_impersonate
 
 @pytest.mark.asyncio
 async def test_legacy_unknown_execution_blocks_vault_nonce_allocation(vault):
+    from sqlalchemy import text
     from app.models import ExecutionAttempt
     from app.services.vault_execution import prepare_operation
 
@@ -730,9 +731,19 @@ async def test_legacy_unknown_execution_blocks_vault_nonce_allocation(vault):
             envelope="{}",
             policy_version=1,
             status="SIGNED",
-            execution_mode=None,
+            execution_mode="simulated",
         )
     )
+    await vault.session.flush()
+    # Old databases received a nullable mode column during migration. A fresh
+    # ORM table is NOT NULL and supplies 'simulated' for None, so reproduce the
+    # historical nullable storage in this isolated, otherwise empty fixture.
+    await vault.session.execute(
+        text("CREATE TABLE legacy_executions AS SELECT * FROM execution_attempts")
+    )
+    await vault.session.execute(text("DROP TABLE execution_attempts"))
+    await vault.session.execute(text("ALTER TABLE legacy_executions RENAME TO execution_attempts"))
+    await vault.session.execute(text("UPDATE execution_attempts SET execution_mode=NULL"))
     await vault.session.commit()
     with pytest.raises(SigningRejectedError, match="pending execution"):
         await prepare_operation(vault.session, op, BlockchainService())
