@@ -1,0 +1,25 @@
+{
+  "observed_at": "2026-11-02T17:25:23.174997+00:00",
+  "source_commit": "8c21058e604f846c90bc747214fbada880706eb2",
+  "branch": "main",
+  "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+  "task_state": "COMPLETED",
+  "onchain_nonce": 1,
+  "confirmed_vault_payments": 1,
+  "payment_claim": {
+    "amount_wei": "10000000000000",
+    "state": "COMMITTED"
+  },
+  "core_audit_valid": true,
+  "original_non_vault_configuration_unchanged": true,
+  "local_voice": {
+    "enabled": true,
+    "available": true,
+    "local": true,
+    "engine": "whisper.cpp",
+    "max_seconds": 20
+  },
+  "cdp_credentials_configured": false,
+  "vault_funding_active": false,
+  "runtime_restarted_without_duplicate_payment": true
+}

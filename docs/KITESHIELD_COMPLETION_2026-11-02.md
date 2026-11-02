@@ -75,3 +75,12 @@ statistical accuracy estimates; historical committed simulated evaluations do
 not establish current live reliability or live attack detection accuracy.
 
 See [vault design and authority boundaries](GUARDED_VAULT_INTEGRATION_2026-11-02.md).
+
+
+Final application source is saved on **local `main`**. A post-restart read-only
+check confirmed one vault payment, contract nonce 1, the same completed task,
+its committed budget claim, valid core audit chain and unchanged non-vault
+configuration. No second payment was sent. The restart record is
+`backend/demo_autonomy/reports/main-vault-restart-2026-11-02.json`.
+
+![Completed Sepolia workflow](ui-audit-3000/12-guarded-vault-completed-2026-11-02.png)
