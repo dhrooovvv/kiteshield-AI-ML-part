@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-/// @notice Isolated Sepolia-oriented research spike. Not integrated with KiteShield.
+/// @notice Sepolia-only guarded session vault. Owner authority is separate from the agent.
 contract GuardedVault {
     address public immutable owner;
     address public agent;
@@ -18,6 +18,7 @@ contract GuardedVault {
     event SessionConfigured(uint256 epoch);
     event Paid(address indexed recipient, uint256 amount, uint256 nonce);
     event Paused();
+    event Recovered(uint256 amount, uint256 epoch);
 
     modifier onlyOwner() { require(msg.sender == owner, "OWNER_ONLY"); _; }
     modifier onlyAgent() { require(msg.sender == agent, "AGENT_ONLY"); _; }
@@ -58,6 +59,19 @@ contract GuardedVault {
     }
 
     function resume() external onlyOwner { paused = false; }
+
+    function recover(uint256 amount) external onlyOwner {
+        require(!entered && amount > 0 && amount <= address(this).balance, "RECOVERY");
+        entered = true;
+        paused = true;
+        uint256 afterBalance = address(this).balance - amount;
+        if (remaining > afterBalance) remaining = afterBalance;
+        epoch++;
+        (bool ok,) = payable(owner).call{value: amount}("");
+        require(ok, "TRANSFER_FAILED");
+        entered = false;
+        emit Recovered(amount, epoch);
+    }
 
     function pay(uint256 amount, uint256 expectedNonce, uint256 expectedEpoch) external onlyAgent {
         require(!entered && !paused, "PAUSED_OR_REENTRANT");

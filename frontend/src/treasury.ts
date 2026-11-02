@@ -38,14 +38,14 @@ export function treasuryExecuteBlockers(status: TreasuryStatus, admin: boolean, 
         ? 'Global autonomous execution is disabled in the backend.'
         : 'Execution requires verified live Sepolia mode.');
   }
-  if (status.mode === 'off') reasons.push('Save a mandate, then enable plan-only first.');
+  if (status.mode === 'off') reasons.push('Use Save & preview, or Refresh preview for the saved mandate.');
   if (status.mode === 'execute') reasons.push('Execute mode is already active.');
   const observed = Date.parse(status.observation?.observed_at ?? '');
   const blockTime = Date.parse(status.observation?.block_time ?? '');
   const maxAge = (status.mandate?.freshness_seconds ?? 60) * 1000;
   if (!status.observation_fresh || !Number.isFinite(observed) || !Number.isFinite(blockTime)
     || at - observed < 0 || at - observed > maxAge || at - blockTime < -15000 || at - blockTime > maxAge) {
-    reasons.push('Click Observe once to get a fresh balance and fee estimate.');
+    reasons.push('Click Refresh preview to get a fresh balance and fee estimate.');
   }
   if (status.plan?.state !== 'ELIGIBLE') reasons.push(status.plan?.reason === 'EXCESS_BELOW_MINIMUM'
     ? 'There is not enough excess above the target after fees. Review the target balance; no sweep is eligible.'

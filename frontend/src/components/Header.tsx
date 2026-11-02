@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, MessageSquare } from 'lucide-react';
 import { api, credentialRoleLabels, KiteShieldAPIError } from '../api/client.ts';
 import { useConnectedRoles } from '../useCredentials.ts';
 import type { BackendHealth } from '../types/index.ts';
@@ -11,9 +11,10 @@ interface HeaderProps {
   title: string;
   onRefreshAll: () => void;
   loading: boolean;
+  onOpenAssistant?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loading }) => {
+export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loading, onOpenAssistant }) => {
   const connectedRoles = useConnectedRoles();
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [keyInput, setKeyInput] = useState(api.getApiKey());
@@ -22,7 +23,7 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
   const [keyError, setKeyError] = useState<string | null>(null);
   const credentialNames = { proposer: 'API_KEY', approver: 'APPROVER_API_KEY', policyAdmin: 'POLICY_ADMIN_API_KEY', demoAdmin: 'DEMO_ADMIN_API_KEY' };
   const roleDescriptions = { proposer: 'Create and submit payment proposals.', approver: 'Approve or reject escalated payments.', policyAdmin: 'Manage security policies and mandates.', demoAdmin: 'Combined access in isolated simulation only.' };
-  const credentialFile = credentialRole === 'demoAdmin' ? 'backend/.env.demo' : 'backend/.env';
+  const credentialFile = health?.autonomy_profile === 'sepolia' ? 'credentials.json in the separate Sepolia profile' : health?.autonomy_demo ? 'main-demo-credentials.json in the isolated demo profile' : credentialRole === 'demoAdmin' ? 'backend/.env.demo' : 'backend/.env';
   const keyDialog = useRef<HTMLDialogElement>(null);
   const keyButton = useRef<HTMLButtonElement>(null);
   const verifiedLive = health?.execution_mode === 'sepolia'
@@ -67,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
     <header className="workspace-header">
       <h1>{title}</h1>
       <div className="workspace-controls">
+        {onOpenAssistant && <button className="btn btn-outline" onClick={onOpenAssistant}><MessageSquare size={15} /> Ask KiteShield</button>}
         <span className={`execution-mode${verifiedLive ? ' execution-mode-live' : ''}`} role="status"
           title={verifiedLive ? `RPC verified at startup (${health?.rpc_verified_at ?? 'time unavailable'}); block is the latest observed at startup.` : undefined}>
           {!health ? 'Execution mode unavailable' : verifiedLive ? `Sepolia · chain 11155111 · block ${health.verified_block_number}` : health.execution_mode === 'simulated' ? 'Simulation · no on-chain broadcast' : 'Execution mode unverified'}
@@ -148,7 +150,7 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
               />
               <p className="credential-key-warning">Never enter a wallet private key or emergency-stop key.</p>
               <details className="credential-help"><summary>Connection details</summary>
-                <p>Use the value of <code>{credentialNames[credentialRole]}</code> from <code>{credentialFile}</code>.</p>
+                <p>Use the value of <code>{health?.autonomy_demo ? credentialRole : credentialNames[credentialRole]}</code> from <code>{credentialFile}</code>.</p>
                 <p>Keys stay in memory until reload. Multiple roles can stay connected.</p>
               </details>
               {keyError && <p role="alert" style={{ color: '#a32e3c', marginBottom: '16px' }}>{keyError}</p>}

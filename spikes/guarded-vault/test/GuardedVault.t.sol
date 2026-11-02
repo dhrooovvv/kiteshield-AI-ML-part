@@ -72,6 +72,32 @@ contract GuardedVaultTest {
             require(vault.remaining() == 2 ether - amount);
         }
     }
+    function testOwnerRecoveryPausesAndInvalidatesEpoch() public {
+        uint256 beforeOwner = owner.balance;
+        vm.prank(owner); vault.recover(9 ether);
+        require(owner.balance == beforeOwner + 9 ether && address(vault).balance == 1 ether);
+        require(vault.paused() && vault.epoch() == 2 && vault.remaining() == 1 ether);
+        vm.expectRevert(); vm.prank(agent); vault.pay(1 ether, 0, 1);
+        vm.prank(owner); vault.resume();
+        vm.expectRevert(); vm.prank(agent); vault.pay(1 ether, 0, 1);
+        vm.prank(agent); vault.pay(1 ether, 0, 2);
+    }
+    function testAgentCannotRecoverOrRedirectRecovery() public {
+        vm.expectRevert(); vm.prank(agent); vault.recover(1 ether);
+        vm.expectRevert(); vault.recover(1 ether);
+        vm.expectRevert(); vm.prank(owner); vault.recover(11 ether);
+        vm.expectRevert(); vm.prank(owner); vault.recover(0);
+    }
+    function testConfigurationDoesNotResumePause() public {
+        vm.prank(agent); vault.pause();
+        vm.prank(owner); vault.configure(agent, supplier, 1 ether, 1 ether, block.timestamp + 1 hours);
+        require(vault.paused() && vault.epoch() == 2);
+        vm.expectRevert(); vm.prank(agent); vault.pay(1 ether, 0, 2);
+    }
+    function testRejectIdenticalOwnerAndAgent() public {
+        vm.expectRevert(); vm.prank(owner);
+        vault.configure(owner, supplier, 1 ether, 1 ether, block.timestamp + 1 hours);
+    }
     function testRejectWrongChain() public {
         vm.chainId(1);
         vm.expectRevert(); new GuardedVault(owner);

@@ -10,9 +10,9 @@ export interface MandateDraftResult {
   validation: string[]; questions: string[]; warnings: string[];
 }
 
-/** Apply only a successful draft to existing fields. This function makes no API calls. */
-export function applyMandateDraft(form: HTMLFormElement, result: MandateDraftResult) {
-  if (result.status !== 'draft' || !result.draft || !result.resolved_recipient) return;
+/** Convert a validated draft to editable React state. Never saves or activates. */
+export function mandateDraftFields(result: MandateDraftResult): Record<string, string> | null {
+  if (result.status !== 'draft' || !result.draft || !result.resolved_recipient) return null;
   const d = result.draft;
   const fields: Record<string, string | number | null> = {
     recipient: result.resolved_recipient, target: d.target_balance_eth,
@@ -20,8 +20,5 @@ export function applyMandateDraft(form: HTMLFormElement, result: MandateDraftRes
     minimum: d.minimum_excess_eth, cooldown: d.cooldown_seconds,
     freshness: d.freshness_seconds,
   };
-  for (const [key, value] of Object.entries(fields)) {
-    const input = form.elements.namedItem(key);
-    if (input instanceof HTMLInputElement) input.value = value === null ? '' : String(value);
-  }
+  return Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, value === null ? '' : String(value)]));
 }

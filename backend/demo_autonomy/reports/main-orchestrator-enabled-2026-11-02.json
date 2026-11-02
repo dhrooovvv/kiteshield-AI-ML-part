@@ -1,0 +1,61 @@
+{
+  "observed_at": "2026-11-02T12:09:06.008514+00:00",
+  "url": "http://localhost:3000",
+  "health": {
+    "profile": "existing-main",
+    "mode": "SEPOLIA",
+    "enabled": true,
+    "planner_enabled": true,
+    "signing": "existing-main",
+    "workflows_enabled": true,
+    "quarantine_enabled": true
+  },
+  "wallet": {
+    "mode": "SEPOLIA",
+    "chain_id": 11155111,
+    "address": "0x3807fc9c3A8adF2d465290bbf06AE769DD08Ada7",
+    "balance_wei": "49669999998391400",
+    "payments_enabled": true,
+    "faucet_enabled": false,
+    "recipient": "0x229d5588641f2614e3f486c853d8ba0ec5ffe811",
+    "payment_budget_wei": "50000000000000",
+    "max_payment_fee_wei": "24887000000000000",
+    "session_fee_budget_wei": "24887000000000000",
+    "wallet_source": "existing-main",
+    "supplier": "Northstar Services",
+    "policy_managed": true,
+    "approval_threshold_wei": "500000000000000000",
+    "vendor_maximum_wei": "50000000000000"
+  },
+  "mandate": {
+    "id": 1,
+    "version": 1,
+    "supplier": "Northstar Services",
+    "recipient": "0x229d5588641f2614e3f486c853d8ba0ec5ffe811",
+    "payment_cap": 50000000000000,
+    "funding_cap": "0"
+  },
+  "control": {
+    "id": 1,
+    "quarantined": 0,
+    "epoch": 0,
+    "blocks": 0
+  },
+  "task_count": 0,
+  "historical_confirmed_transactions": 19,
+  "new_transactions": 0,
+  "core_audit_valid": true,
+  "non_autonomy_settings_unchanged": true,
+  "policy_version": 6,
+  "verification": {
+    "backend_targeted_passed": 50,
+    "frontend_targeted_passed": 6,
+    "frontend_build": "passed",
+    "frontend_lint": "passed",
+    "new_python_lint": "passed",
+    "financial_test_network": "disabled",
+    "live_preflight": "passed_no_signature_or_broadcast",
+    "fee_headroom_inside_existing_limits": "passed"
+  },
+  "restart_mandate_preserved": true
+}

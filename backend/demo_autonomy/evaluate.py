@@ -25,20 +25,35 @@ def wilson(successes, total):
     return [center - radius, center + radius]
 
 
-async def evaluate(profile):
-    if not profile.name.startswith("kiteshield-gate1-demo-"):
+async def evaluate(profile, base_url="http://127.0.0.1:8001"):
+    integrated = profile.name.startswith("kiteshield-gate-main-")
+    if not integrated and not profile.name.startswith("kiteshield-gate1-demo-"):
         raise ValueError("Dedicated demo profile required")
-    credentials = json.loads((profile / "demo-credentials.json").read_text())
+    if integrated:
+        saved = json.loads((profile / "main-demo-credentials.json").read_text())
+        credentials = {
+            "agent": saved["proposer"],
+            "admin": saved["policyAdmin"],
+            "approver": saved["approver"],
+        }
+    else:
+        credentials = json.loads((profile / "demo-credentials.json").read_text())
+    prefix = "/api/v1/autonomy" if integrated else ""
     dataset = Path(__file__).with_name("evaluation") / "cases.json"
     cases = json.loads(dataset.read_text())
     rows = []
-    async with httpx.AsyncClient(
-        base_url="http://127.0.0.1:8001", timeout=10, trust_env=False
-    ) as client:
+    async with httpx.AsyncClient(base_url=base_url, timeout=10, trust_env=False) as client:
 
         async def call(method, path, role="agent", data=None):
             return await client.request(
-                method, path, json=data, headers={"Authorization": "Bearer " + credentials[role]}
+                method,
+                prefix + path,
+                json=data,
+                headers=(
+                    {"X-API-Key": credentials[role]}
+                    if integrated
+                    else {"Authorization": "Bearer " + credentials[role]}
+                ),
             )
 
         async def start(case):
@@ -59,7 +74,7 @@ async def evaluate(profile):
                 await asyncio.sleep(0.5)
             return {"state": "TIMEOUT", "reason": "EVALUATION_TIMEOUT"}
 
-        health = (await client.get("/health")).json()
+        health = (await client.get(prefix + "/health")).json()
         if health.get("mode") != "SIMULATED" or not health.get("workflows_enabled"):
             raise RuntimeError("Enabled isolated workflow demo required")
         setup = await call(
@@ -130,6 +145,7 @@ async def evaluate(profile):
     successes = sum(row["passed"] for row in rows)
     report = {
         "mode": "SIMULATED",
+        "main_integrated": integrated,
         "model": "kiteshield-gemma4:12b-q4km",
         "model_digest": "13478e018db994bfea035644c1774abc573381ee0ff7e11ad59f3fbc89fd1519",
         "ollama_version": "0.40.8",
@@ -149,4 +165,10 @@ async def evaluate(profile):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", type=Path)
-    asyncio.run(evaluate(parser.parse_args().profile.resolve()))
+    parser.add_argument(
+        "--base-url",
+        choices=("http://127.0.0.1:8001", "http://localhost:3000"),
+        default="http://127.0.0.1:8001",
+    )
+    args = parser.parse_args()
+    asyncio.run(evaluate(args.profile.resolve(), args.base_url))

@@ -1,4 +1,5 @@
 import type { MandateDraftResult } from '../mandateDraft.ts';
+import type { InvoiceSnapshot, InvoiceVendor, VendorUpdate, InvoiceRedTeam } from '../invoices.ts';
 /**
  * KiteShield Wallet — Centralized Typed API Client
  *
@@ -24,6 +25,9 @@ import type {
   Transaction,
 } from '../types/index.ts';
 import type { PortfolioSnapshot } from '../portfolio.ts';
+import type { FundingStatus, FundingPlan, FundingRequest } from '../funding.ts';
+import type { AssistantAnswer } from '../assistant.ts';
+import type { InvoiceAgentTask } from '../invoiceAgent.ts';
 import type { TreasuryAction, TreasuryConfig, TreasuryStatus } from '../treasury.ts';
 
 export class KiteShieldAPIError extends Error {
@@ -229,6 +233,29 @@ class APIClient {
   }
 
   // ---- Health ----
+  public askAssistant(prompt: string, selectedFileId?: string): Promise<AssistantAnswer> {
+    const role = this.connectedRoles.includes('proposer') ? 'proposer' : this.connectedRoles[0];
+    return this.request('/assistant/query', { method: 'POST',
+      headers: { 'X-API-Key': role ? this.getRoleKey(role) : '' },
+      body: JSON.stringify({ prompt, selected_file_id: selectedFileId }), signal: AbortSignal.timeout(70000) });
+  }
+  public getInvoiceTasks(): Promise<InvoiceAgentTask[]> { return this.request('/assistant/invoice-tasks'); }
+  public getInvoiceTask(id: string): Promise<InvoiceAgentTask> { return this.request(`/assistant/invoice-tasks/${encodeURIComponent(id)}`); }
+  public cancelInvoiceTask(id: string): Promise<InvoiceAgentTask> { return this.request(`/assistant/invoice-tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); }
+  public submitAssistantPayment(id: string): Promise<Proposal> {
+    return this.request(`/assistant/payments/${encodeURIComponent(id)}/submit`, { method: 'POST' });
+  }
+  public getFunding(): Promise<FundingStatus> { return this.request('/funding'); }
+  public planFunding(prompt: string, address?: string): Promise<FundingPlan> {
+    return this.request('/funding/plan', { method: 'POST', body: JSON.stringify({ prompt, address }),
+      signal: AbortSignal.timeout(70000) });
+  }
+  public requestFunding(id: string): Promise<FundingRequest> {
+    return this.request(`/funding/${encodeURIComponent(id)}/request`, { method: 'POST' });
+  }
+  public getFundingRequest(id: string): Promise<FundingRequest> {
+    return this.request(`/funding/${encodeURIComponent(id)}`);
+  }
   public async getPortfolio(signal?: AbortSignal): Promise<PortfolioSnapshot> {
     return this.request('/portfolio', { signal: signal
       ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : undefined });
@@ -240,6 +267,35 @@ class APIClient {
       body: JSON.stringify({ instruction }) });
   }
 
+  public getInvoices(): Promise<InvoiceSnapshot> { return this.request('/invoices'); }
+  public getInvoiceVendors(): Promise<InvoiceVendor[]> { return this.request('/invoices/vendors'); }
+  public getInvoiceRedTeam(): Promise<InvoiceRedTeam> { return this.request('/invoices/red-team'); }
+  public recheckInvoice(id: string): Promise<{ invoice_id: string }> {
+    return this.request(`/invoices/${encodeURIComponent(id)}/recheck`, { method: 'POST',
+      signal: AbortSignal.timeout(120000), headers: { 'X-API-Key': this.keyForAction('proposer') } });
+  }
+  public updateInvoiceVendor(id: string, update: VendorUpdate): Promise<InvoiceVendor> {
+    return this.request(`/invoices/vendors/${encodeURIComponent(id)}`, {
+      method: 'PUT', headers: { 'X-API-Key': this.keyForAction('policyAdmin') }, body: JSON.stringify(update),
+    });
+  }
+  public submitInvoice(text: string): Promise<unknown> {
+    return this.request('/invoices/intake', { method: 'POST',
+      signal: AbortSignal.timeout(120000),
+      headers: { 'X-API-Key': this.keyForAction('proposer') }, body: JSON.stringify({ text }) });
+  }
+  public uploadInvoice(file: File): Promise<{ invoice_id: string }> {
+    return this.request(`/invoices/upload?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST', signal: AbortSignal.timeout(120000),
+      headers: { 'X-API-Key': this.keyForAction('proposer'), 'Content-Type': 'application/octet-stream' },
+      body: file,
+    });
+  }
+  public observeInvoices(): Promise<unknown> {
+    return this.request('/invoices/observe', { method: 'POST',
+      signal: AbortSignal.timeout(120000),
+      headers: { 'X-API-Key': this.keyForAction('policyAdmin') } });
+  }
   public getTreasury(): Promise<TreasuryStatus> { return this.request('/treasury'); }
   public getTreasuryActions(): Promise<TreasuryAction[]> { return this.request('/treasury/actions'); }
   public saveTreasury(config: TreasuryConfig, expected_version: number): Promise<TreasuryStatus> {

@@ -48,6 +48,8 @@ class Settings:
     workflows_enabled: bool = False
     quarantine_enabled: bool = False
     wallet_services_enabled: bool = False
+    mode: Literal["SIMULATED", "SEPOLIA"] = "SIMULATED"
+    wallet_source: Literal["isolated-demo", "separate-sepolia", "existing-main"] = "isolated-demo"
 
 
 class HumanRequiredError(Exception):
@@ -115,6 +117,8 @@ class Engine:
         with self.db() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
+                CREATE TABLE IF NOT EXISTS task_backend (
+                    task_id TEXT PRIMARY KEY, value TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS mandates (
                     id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL,
                     supplier TEXT NOT NULL, recipient TEXT NOT NULL,
@@ -150,7 +154,14 @@ class Engine:
             raise ValueError("INVALID_SUPPLIER")
         if not re.fullmatch(r"0x[0-9a-fA-F]{40}", recipient):
             raise ValueError("INVALID_RECIPIENT")
-        if any(type(x) is not int or not 0 < x <= 10**15 for x in (payment_cap, funding_cap)):
+        if (
+            type(payment_cap) is not int
+            or not 0 < payment_cap <= 10**15
+            or type(funding_cap) is not int
+            or not (0 if self.settings.mode == "SEPOLIA" else 1)
+            <= funding_cap
+            <= (10**18 if self.settings.mode == "SEPOLIA" else 10**15)
+        ):
             raise ValueError("INVALID_BUDGET")
         with self.db() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -204,8 +215,25 @@ class Engine:
                     None,
                 ),
             )
-            self.event(db, task_id, "GOAL_ACCEPTED", "SIMULATED; administrator mandate bound")
+            db.execute(
+                "INSERT INTO task_backend VALUES(?,?)",
+                (task_id, json.dumps(self.context_for_new_task())),
+            )
+            self.event(
+                db, task_id, "GOAL_ACCEPTED", self.settings.mode + "; administrator mandate bound"
+            )
             return task_id
+
+    def context_for_new_task(self):
+        return {"backend": "NATIVE"}
+
+    def task_context(self, task_id):
+        with self.db() as db:
+            row = db.execute(
+                "SELECT value FROM task_backend WHERE task_id=?", (task_id,)
+            ).fetchone()
+        # Historical tasks predate the vault feature and remain native forever.
+        return json.loads(row[0]) if row else {"backend": "NATIVE"}
 
     def require_enabled(self):
         if not self.settings.enabled:
@@ -268,6 +296,10 @@ class Engine:
             if not row:
                 raise KeyError(task_id)
             result = dict(row)
+            context = db.execute(
+                "SELECT value FROM task_backend WHERE task_id=?", (task_id,)
+            ).fetchone()
+            result["payment_backend"] = json.loads(context[0])["backend"] if context else "NATIVE"
             result["steps"] = [
                 dict(r)
                 for r in db.execute(

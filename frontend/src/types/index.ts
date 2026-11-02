@@ -57,7 +57,9 @@ export interface Transaction {
 }
 
 export interface Proposal {
-  provenance?: 'DETERMINISTIC_MANDATE' | 'AGENT_OR_STRUCTURED';
+  provenance?: 'DETERMINISTIC_MANDATE' | 'AGENT_OR_STRUCTURED' | 'invoice_intake';
+  payment_backend?: 'NATIVE' | 'VAULT';
+  vault_operation_id?: string | null;
   mandate_version?: number | null;
   auto_execution_enabled?: boolean;
   auto_execution_max_wei?: string;
@@ -111,6 +113,7 @@ export interface PolicyUpdatePayload {
 }
 
 export interface PendingApproval {
+  vault?: {address: string; epoch: number; session_nonce: number; payload_digest: string};
   id: string;
   proposal_id: string;
   action_digest: string;
@@ -169,7 +172,12 @@ export interface AuditIntegrityVerification {
 }
 
 export interface BackendHealth {
+  local_voice_enabled?: boolean;
+  autonomy_demo?: boolean;
+  autonomy_profile?: 'simulation' | 'sepolia' | 'existing' | null;
   execution_mode?: 'simulated' | 'sepolia';
+  auto_execute_enabled?: boolean;
+  auto_execute_max_eth?: string;
   verified_chain_id?: number | null;
   verified_block_number?: number | null;
   rpc_verified_at?: string | null;

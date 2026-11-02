@@ -75,26 +75,31 @@ class WaitingError(Exception):
 
 
 class WalletServicesAdapter:
-    def __init__(self, engine):
+    def __init__(self, engine, core_app=None):
         from app.core.config import get_settings
         from app.main import create_app
 
         self.engine = engine
         self.settings = get_settings()
+        self.validate_profile()
+        self.app = core_app if core_app is not None else create_app()
+        self.main_integrated = core_app is not None
+        self.client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self.app), base_url="http://isolated-demo:8001"
+        )
+
+    def validate_profile(self):
         if (
             self.settings.execution_mode != "simulated"
             or self.settings.signer_private_key != "b" * 64
         ):
             raise RuntimeError("Demo isolation failed")
-        self.app = create_app()
-        self.client = httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=self.app), base_url="http://isolated-demo:8001"
-        )
 
     async def initialize(self):
         from app.db import init_db
 
-        await init_db()
+        if not self.main_integrated:
+            await init_db()
         with self.engine.db() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS wallet_links ("

@@ -7,11 +7,13 @@ import {
   History,
   Wallet,
   Repeat,
+  ReceiptText,
 } from 'lucide-react';
 
-export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury';
+export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury' | 'invoices' | 'autonomy';
 
 interface NavigationProps {
+  autonomyEnabled?: boolean;
   currentTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   pendingApprovalsCount: number;
@@ -20,6 +22,7 @@ interface NavigationProps {
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
+  autonomyEnabled = false,
   currentTab,
   onTabChange,
   pendingApprovalsCount,
@@ -32,8 +35,10 @@ export const Navigation: React.FC<NavigationProps> = ({
       label: 'Overview',
       icon: <LayoutDashboard size={18} />,
     },
+    ...(autonomyEnabled ? [{ id: 'autonomy' as NavTab, label: 'Autonomous Tasks', icon: <Repeat size={18} /> }] : []),
     { id: 'portfolio' as NavTab, label: 'Portfolio', icon: <Wallet size={18} /> },
     { id: 'treasury' as NavTab, label: 'Treasury Autopilot', icon: <Repeat size={18} /> },
+    { id: 'invoices' as NavTab, label: 'Accounts Payable', icon: <ReceiptText size={18} /> },
     {
       id: 'proposals' as NavTab,
       label: 'Proposals',

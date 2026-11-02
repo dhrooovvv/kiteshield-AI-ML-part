@@ -8,6 +8,23 @@ import { api } from '../src/api/client.ts';
 import { treasuryExecuteBlockers } from '../src/treasury.ts';
 import type { TreasuryStatus } from '../src/treasury.ts';
 
+test('treasury warning overrides the eligibility white paragraph text with accessible contrast', () => {
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const rule = css.match(/\.treasury-page \.treasury-eligibility \.treasury-alert\s*\{([^}]+)\}/)?.[1] ?? '';
+  const foreground = rule.match(/(?:^|;)\s*color:\s*(#[0-9a-f]{6})/)?.[1];
+  const background = rule.match(/background:\s*(#[0-9a-f]{6})/)?.[1];
+  assert.ok(foreground && background, 'Alert needs explicit foreground and background');
+  const luminance = (hex: string) => {
+    const channels = [1, 3, 5].map(i => {
+      const value = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const levels = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+  assert.ok((levels[0] + 0.05) / (levels[1] + 0.05) >= 4.5);
+});
+
 test('execute readiness explains monitor, excess, roles and stale observations without granting authority', () => {
   const at = Date.parse('2026-10-19T07:00:00Z');
   const state = {

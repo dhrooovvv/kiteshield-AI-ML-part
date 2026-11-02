@@ -317,6 +317,10 @@ async def change_mode(session, request, actor):
     m = await session.get(TreasuryMandate, "global", populate_existing=True)
     if not m or m.version != request.expected_version:
         raise ValidationError("MANDATE_VERSION_CONFLICT: refresh the mandate")
+    # Repeating a non-executing mode must not cancel an observer's lease.
+    current_mode = m.mode if m.enabled else "off"
+    if request.mode != "execute" and request.mode == current_mode:
+        return m
     if request.mode == "execute":
         if not m.enabled or m.mode != "plan_only" or not m.observation_json:
             raise ValidationError("Enable plan-only and observe before granting execute permission")
@@ -345,9 +349,9 @@ async def tick(factory, *, plan_only: bool = False):
         await lock_execution(session)
         m = await session.get(TreasuryMandate, "global", populate_existing=True)
         if not m or not m.enabled:
-            return
+            return "MANDATE_DISABLED"
         if m.claim_until and datetime.fromisoformat(m.claim_until) > now():
-            return
+            return "OBSERVATION_BUSY"
         m.claim_token = token
         m.claim_until = (
             now() + timedelta(seconds=get_settings().treasury_claim_seconds)
@@ -360,9 +364,9 @@ async def tick(factory, *, plan_only: bool = False):
         await lock_execution(session)
         m = await session.get(TreasuryMandate, "global", populate_existing=True)
         if not m or m.version != version or m.claim_token != token or not m.enabled:
-            return
+            return "MANDATE_CHANGED"
         if datetime.fromisoformat(m.claim_until) <= now():
-            return
+            return "OBSERVATION_EXPIRED"
         plan = await compute_plan(session, m, snapshot)
         m.observation_json = json.dumps(snapshot)
         plan_json = json.dumps(plan.to_dict())
@@ -454,6 +458,7 @@ async def tick(factory, *, plan_only: bool = False):
         await session.commit()
     if proposal_id:
         await run_execution(factory, proposal_id)
+    return "OBSERVED"
 
 
 async def run_execution(factory, proposal_id):

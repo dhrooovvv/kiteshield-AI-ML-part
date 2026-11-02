@@ -99,7 +99,32 @@ class BlockchainService:
                 ExecutionAttempt.execution_mode == settings.execution_mode,
             )
         )
-        nonce = max(pending, (last + 1) if last is not None else 0)
+        from app.models import VaultOperation
+
+        vault_pending = await session.scalar(
+            select(VaultOperation.id)
+            .where(
+                VaultOperation.sender == sender.lower(),
+                VaultOperation.execution_mode == settings.execution_mode,
+                VaultOperation.status.in_(("PREPARED", "SIGNED", "UNCERTAIN", "SUBMITTED")),
+            )
+            .limit(1)
+        )
+        if vault_pending:
+            raise TransactionSubmissionError(
+                "Reconcile pending vault execution before a native payment"
+            )
+        vault_last = await session.scalar(
+            select(func.max(VaultOperation.nonce)).where(
+                VaultOperation.sender == sender.lower(),
+                VaultOperation.execution_mode == settings.execution_mode,
+            )
+        )
+        nonce = max(
+            pending,
+            (last + 1) if last is not None else 0,
+            (vault_last + 1) if vault_last is not None else 0,
+        )
         fee = 2 * base + priority
         gas = (gas * 120 + 99) // 100
         if gas > settings.max_gas_units or fee > settings.max_fee_per_gas_wei:

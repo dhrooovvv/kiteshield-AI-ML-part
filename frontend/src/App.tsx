@@ -15,9 +15,18 @@ import { countHumanAttentionItems } from './dashboardMetrics.ts';
 import { refreshPaymentReceipts } from './paymentReceipts.ts';
 import { PortfolioView } from './views/PortfolioView.tsx';
 import { TreasuryView } from './views/TreasuryView.tsx';
+import { InvoicesView } from './views/InvoicesView.tsx';
+import { AssistantDialog } from './components/AssistantDialog.tsx';
+import { FundingDialog } from './components/FundingDialog.tsx';
+import { AutonomyView } from './views/AutonomyView.tsx';
+import { autonomyAvailable } from './autonomy.ts';
 
 export const App: React.FC = () => {
+  const [autonomyEnabled, setAutonomyEnabled] = useState(false);
+  useEffect(() => { let active = true; void autonomyAvailable().then(value => { if (active) setAutonomyEnabled(value); }); return () => { active = false; }; }, []);
   const [currentTab, setCurrentTab] = useState<NavTab>('overview');
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [fundingOpen, setFundingOpen] = useState(false);
   const [health, setHealth] = useState<BackendHealth | null>(null);
   const [activePolicy, setActivePolicy] = useState<Policy | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
@@ -49,6 +58,13 @@ export const App: React.FC = () => {
     setLoading(true);
     setGlobalError(null);
     try {
+      if (!api.getConnectedRoles().length) {
+        try { setHealth(await api.checkHealth()); }
+        catch { setHealth(null); setGlobalError('Could not connect to KiteShield. Check the local backend and refresh.'); }
+        setActivePolicy(null); setProposals([]); setPendingApprovals([]); setPromptReviews([]);
+        setBlockedCount(undefined); setPendingApprovalsError(null); setPromptReviewsError(null);
+        return;
+      }
       const [healthResult, policyResult, proposalResult, approvalResult, reviewResult, countsResult] = await Promise.allSettled([
         api.checkHealth(), api.getActivePolicy(), api.listProposals(undefined, 50, 0),
         api.listPendingApprovals(), api.listPromptScreeningReviews(),
@@ -87,7 +103,7 @@ export const App: React.FC = () => {
       const authenticationFailed = [policyResult, proposalResult, approvalResult, reviewResult, countsResult].some(
         (result) => result.status === 'rejected' && result.reason instanceof KiteShieldAPIError && result.reason.status === 401
       );
-      setGlobalError(authenticationFailed
+      setGlobalError(authenticationFailed && !api.getConnectedRoles().length ? null : authenticationFailed
         ? 'The backend is reachable, but authentication failed. Open API key and verify the credential for its matching role. Keys and verified roles are cleared when the page reloads.'
         : failures.length ? 'Could not refresh: ' + failures.join(', ') + '. Previously loaded data may be out of date. Check your connection and API key, then retry.' : null);
       if (!failures.length) setLastRefreshed(new Date().toLocaleTimeString());
@@ -127,7 +143,7 @@ export const App: React.FC = () => {
     void fetchAllData();
   };
   const handleProposalCreated = (newProp: Proposal) => {
-    setProposals((prev) => [newProp, ...prev]);
+    setProposals((prev) => [newProp, ...prev.filter(item => item.id !== newProp.id)]);
     fetchAllData();
   };
 
@@ -146,6 +162,7 @@ export const App: React.FC = () => {
   return (
     <div className="app-shell">
       <Navigation
+        autonomyEnabled={autonomyEnabled}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         pendingApprovalsCount={pendingApprovals.length}
@@ -153,7 +170,7 @@ export const App: React.FC = () => {
         totalProposalsCount={proposals.length}
       />
       <div className="app-main">
-        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio', treasury: 'Treasury Autopilot' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} />
+        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio', treasury: 'Treasury Autopilot', invoices: 'Accounts Payable', autonomy: 'Autonomous Tasks' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} onOpenAssistant={() => setAssistantOpen(true)} />
 
       {/* Global error banner if backend is unreachable */}
       {globalError && (
@@ -182,7 +199,7 @@ export const App: React.FC = () => {
 
       {/* Main Content View Container */}
       <main className="content-shell">
-        {currentTab !== 'portfolio' && currentTab !== 'approvals' && currentTab !== 'treasury' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
+        {currentTab !== 'portfolio' && currentTab !== 'approvals' && currentTab !== 'treasury' && currentTab !== 'invoices' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
         {currentTab === 'overview' && (
           <OverviewView
             blockedAttemptsCount={blockedCount}
@@ -230,12 +247,19 @@ export const App: React.FC = () => {
           />
         )}
 
+        {currentTab === 'autonomy' && autonomyEnabled && <AutonomyView />}
         {currentTab === 'audit' && <AuditView refreshRevision={refreshRevision} />}
-        {currentTab === 'portfolio' && <PortfolioView refreshRevision={portfolioRefreshRevision} />}
+        {currentTab === 'invoices' && <InvoicesView refreshRevision={refreshRevision} />}
+        {currentTab === 'portfolio' && <PortfolioView refreshRevision={portfolioRefreshRevision} onOpenAssistant={() => setAssistantOpen(true)} />}
         {currentTab === 'treasury' && <TreasuryView refreshRevision={portfolioRefreshRevision} onOpenAudit={setSelectedAuditCid} onOpenDetails={setSelectedProposalForDetails} />}
       </main>
 
       {/* Modals */}
+      {assistantOpen && <AssistantDialog health={health} onClose={() => setAssistantOpen(false)}
+        onInvoices={() => { setAssistantOpen(false); setCurrentTab('invoices'); }} onTaskComplete={handleManualRefresh}
+        onFund={() => { setAssistantOpen(false); setFundingOpen(true); }}
+        onProposal={handleProposalCreated} onDetails={proposal => { setAssistantOpen(false); setSelectedProposalForDetails(proposal); }} />}
+      {fundingOpen && <FundingDialog onClose={() => setFundingOpen(false)} onFunded={handleManualRefresh} />}
       {selectedApproval && (
         <ApprovalModal
           approval={selectedApproval}

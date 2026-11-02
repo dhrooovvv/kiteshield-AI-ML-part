@@ -37,6 +37,16 @@ async def execute_payment(
     audit: AuditService,
     limits: ExecutionLimits | None = None,
 ) -> Proposal:
+    from app.models import VaultOperation
+    from app.services.vault_execution import execute_vault_payment
+
+    vault_op = await session.scalar(
+        select(VaultOperation).where(VaultOperation.proposal_id == proposal_id)
+    )
+    if vault_op:
+        return await execute_vault_payment(
+            session, vault_op, capability, signer, blockchain, audit, limits
+        )
     from app.services.treasury import prepare_authority_context
 
     await prepare_authority_context(session, proposal_id)
@@ -92,8 +102,10 @@ async def execute_payment(
         if limits:
             limits.check_envelope(sender, envelope)
             await audit.record_event(
-                session, event_type="EXECUTION_LIMITS_CHECKED",
-                correlation_id=proposal.correlation_id, actor="execution_coordinator",
+                session,
+                event_type="EXECUTION_LIMITS_CHECKED",
+                correlation_id=proposal.correlation_id,
+                actor="execution_coordinator",
                 details={"proposal_id": proposal.id, "limits": limits.model_dump()},
             )
         attempt = ExecutionAttempt(
@@ -203,10 +215,15 @@ async def execute_payment(
             "Broadcast outcome uncertain; reconcile this same transaction"
         )
         await audit.record_event(
-            session, event_type="TX_UNCERTAIN", correlation_id=proposal.correlation_id,
+            session,
+            event_type="TX_UNCERTAIN",
+            correlation_id=proposal.correlation_id,
             actor="blockchain_service",
-            details={"proposal_id": proposal.id, "execution_id": attempt.id,
-                     "tx_hash": attempt.tx_hash},
+            details={
+                "proposal_id": proposal.id,
+                "execution_id": attempt.id,
+                "tx_hash": attempt.tx_hash,
+            },
         )
         await session.commit()
         raise

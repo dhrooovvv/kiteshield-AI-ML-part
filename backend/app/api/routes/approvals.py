@@ -61,6 +61,17 @@ def _format_approval(approval: ApprovalRequest, proposal: Proposal | None = None
             "amount_eth": wei_to_eth(proposal.amount_wei),
             "chain_id": proposal.chain_id,
         }
+    vault_op = proposal.__dict__.get("vault_operation") if proposal else None
+    if vault_op:
+        from app.schemas.vault import VaultPayload
+
+        payload = VaultPayload.model_validate_json(vault_op.payload)
+        data["vault"] = {
+            "address": payload.vault,
+            "epoch": payload.epoch,
+            "session_nonce": payload.session_nonce,
+            "payload_digest": vault_op.authority_digest,
+        }
     return data
 
 
@@ -152,15 +163,9 @@ async def decide_approval(
     current = await session.scalar(select(Policy).where(Policy.is_active.is_(True)))
     if not current or approval.policy_version != current.version:
         raise ApprovalAlreadyDecidedError("Policy changed; reevaluate before approval")
-    from app.schemas import NormalizedAction
+    from app.services.vault import action_for_proposal
 
-    expected = NormalizedAction(
-        proposal_id=proposal.id,
-        correlation_id=proposal.correlation_id,
-        recipient=proposal.recipient,
-        amount_wei=int(proposal.amount_wei),
-        chain_id=proposal.chain_id,
-    )
+    expected = await action_for_proposal(session, proposal)
     if approval.action_digest != expected.action_digest_without_nonce():
         raise ApprovalAlreadyDecidedError("Approval no longer matches the exact action")
 

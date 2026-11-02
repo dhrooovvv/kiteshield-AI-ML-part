@@ -4,6 +4,51 @@ import { createServer } from 'vite';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+test('proposal cards emphasize their source and retain real transaction evidence without policy clutter', async () => {
+  const server = await createServer({ configFile: false, appType: 'custom',
+    server: { middlewareMode: true, hmr: false, watch: null } });
+  try {
+    const { ProposalCard } = await server.ssrLoadModule('/src/components/ProposalCard.tsx');
+    const hash = '0x' + 'a'.repeat(64);
+    const base = { id: 'source-card', correlation_id: 'correlation', status: 'CONFIRMED',
+      created_at: '2026-10-24T18:02:00Z', prompt: 'Original request is available in Details',
+      recipient: '0x' + '11'.repeat(20), amount_eth: '0.000000000000000001', amount_wei: '1',
+      chain_id: 11155111, policy_decision: { decision: 'ALLOW', reason_codes: ['ONE', 'TWO', 'THREE'] },
+      transaction: { id: 'tx', tx_hash: hash, execution_mode: 'sepolia', execution_outcome: 'CONFIRMED' } };
+    const render = (proposal: object) => renderToStaticMarkup(createElement(ProposalCard, {
+      proposal, onUpdated() {}, onOpenAudit() {}, onOpenDetails() {}, executionMode: 'sepolia',
+    }));
+    for (const [provenance, title] of [
+      ['invoice_intake', 'Invoice intake · verified vendor registry'],
+      ['DETERMINISTIC_MANDATE', 'Treasury sweep · standing mandate'],
+      ['AGENT_OR_STRUCTURED', 'Payment request'],
+    ]) {
+      const html = render({ ...base, provenance, mandate_version: 4 });
+      assert.match(html, new RegExp(`<h3 class="proposal-card-source">${title}</h3>`));
+      assert.doesNotMatch(html, /Policy decision|View reasons|proposal-card-prompt/);
+      assert.match(html, /datetime="2026-10-24T18:02:00Z"/i);
+      assert.match(html, /0\.000000000000000001/);
+      assert.ok(html.includes(`https://sepolia.etherscan.io/tx/${hash}`));
+      assert.match(html, /1 receipt, not finality/);
+      assert.match(html, /Details|Audit trail/);
+    }
+    for (const transaction of [
+      { ...base.transaction, execution_mode: 'simulated' },
+      { ...base.transaction, tx_hash: '0x1234' },
+      { ...base.transaction, execution_outcome: 'SIGNED' },
+    ]) assert.doesNotMatch(render({ ...base, transaction }), /href=/);
+    const pending = render({ ...base, status: 'ALLOWED', provenance: 'invoice_intake', transaction: null });
+    assert.match(pending, /proposal-card-awaiting/);
+    assert.match(pending, /Not submitted · no on-chain transaction/);
+    assert.doesNotMatch(pending, /href=/);
+    assert.ok(pending.indexOf('Sign &amp; broadcast') < pending.indexOf('<footer'));
+    assert.match(render({ ...base, transaction: null }), /Transaction evidence unavailable/);
+    const vaultHtml = render({...base, status: 'APPROVED', transaction: null, payment_backend: 'VAULT'});
+    assert.match(vaultHtml, /Guarded vault|Autonomous tasks/);
+    assert.doesNotMatch(vaultHtml, /Sign &amp; broadcast|Reconcile &amp; retry/);
+  } finally { await server.close(); }
+});
+
 test('autonomous small payments omit manual signing, approved and over-cap keep it', async () => {
   const server = await createServer({
     configFile: false, appType: 'custom',

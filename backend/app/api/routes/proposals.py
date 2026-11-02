@@ -137,8 +137,13 @@ def _model_to_proposal_response(p: Proposal) -> ProposalResponse:
         tx_resp = transaction_response(tx_rec)
 
     treasury_action = p.__dict__.get("treasury_action")
+    invoice_record = p.__dict__.get("invoice_record")
+    vault_op = p.__dict__.get("vault_operation")
     return ProposalResponse(
-        provenance="DETERMINISTIC_MANDATE" if treasury_action else "AGENT_OR_STRUCTURED",
+        provenance="invoice_intake" if invoice_record else (
+            "DETERMINISTIC_MANDATE" if treasury_action else "AGENT_OR_STRUCTURED"),
+        payment_backend="VAULT" if vault_op else "NATIVE",
+        vault_operation_id=vault_op.id if vault_op else None,
         mandate_version=treasury_action.mandate_version if treasury_action else None,
         auto_execution_enabled=(get_settings().auto_execute_enabled
                                 and get_settings().execution_mode == "sepolia"),
@@ -486,15 +491,10 @@ async def evaluate_proposal(
     spending_res = await session.execute(spending_stmt)
     daily_spent_wei = sum(int(amt) for amt in spending_res.scalars().all())
 
-    # Build canonical action
-    action = NormalizedAction(
-        proposal_id=proposal.id,
-        correlation_id=proposal.correlation_id,
-        action_type=AssetType(proposal.asset_type),
-        recipient=proposal.recipient,
-        amount_wei=int(proposal.amount_wei),
-        chain_id=proposal.chain_id,
-    )
+    # Vault approvals bind the exact typed call and session as well as the payout.
+    from app.services.vault import action_for_proposal
+
+    action = await action_for_proposal(session, proposal)
 
     # Evaluate deterministically
     policy_cfg = PolicyConfig.from_db_row(active_policy)

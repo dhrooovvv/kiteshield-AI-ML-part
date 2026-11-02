@@ -43,6 +43,43 @@ class Settings(BaseSettings):
         description="Comma-separated CORS origins",
     )
 
+    # Isolated demo integration; never enables funded-wallet execution.
+    autonomy_enabled: bool = False
+    autonomy_profile_dir: str = ""
+    autonomy_quarantine_enabled: bool = False
+    autonomy_model: str = "kiteshield-gemma4:12b-q4km"
+    autonomy_model_digest: str = ""
+    autonomy_ollama_version: str = ""
+    # Explicit opt-in for the existing Sepolia wallet. Defaults grant no budget.
+    autonomy_live_enabled: bool = False
+    autonomy_recipient: str = ""
+    autonomy_payment_budget_wei: int = Field(default=0, ge=0, le=10**15)
+    autonomy_session_fee_budget_wei: int = Field(default=0, ge=0, le=10**18)
+    autonomy_funding_budget_wei: int = Field(default=0, ge=0, le=10**18)
+    autonomy_faucet_grant_ceiling_wei: int = Field(default=0, ge=0, le=10**18)
+    autonomy_incoming_watch_enabled: bool = False
+    autonomy_incoming_poll_seconds: int = Field(default=30, ge=10, le=300)
+    autonomy_incoming_confirmations: int = Field(default=6, ge=1, le=64)
+    local_voice_enabled: bool = False
+    local_voice_binary: str = ""
+    local_voice_binary_sha256: str = ""
+    local_voice_model: str = ""
+    local_voice_model_sha256: str = ""
+    local_voice_max_seconds: int = Field(default=20, ge=1, le=30)
+    local_voice_timeout_seconds: int = Field(default=30, ge=1, le=60)
+    vault_enabled: bool = False
+    autonomy_vault_payments_enabled: bool = False
+    vault_quarantine_pause_enabled: bool = False
+    vault_agent_key_file: str = ""
+    vault_agent_address: str = ""
+    vault_artifact_sha256: str = ""
+    vault_max_gas_units: int = Field(default=1_000_000, ge=21000, le=2_000_000)
+    vault_owner_max_gas_units: int = Field(default=8_000_000, ge=21000, le=10_000_000)
+    vault_fee_budget_wei: int = Field(default=0, ge=0, le=10**18)
+    vault_escrow_budget_wei: int = Field(default=0, ge=0, le=10**15)
+    vault_agent_gas_budget_wei: int = Field(default=0, ge=0, le=10**15)
+    vault_session_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
+
     # ---- Database ----
     database_url: str = Field(
         default="sqlite+aiosqlite:///./kiteshield.db",
@@ -75,8 +112,28 @@ class Settings(BaseSettings):
     drafter_recipient_aliases: dict[str, str] = Field(default_factory=dict)
     drafter_llm_enabled: bool = Field(default=False)
     drafter_llm_endpoint: str = Field(default="http://127.0.0.1:11434/v1/chat/completions")
-    drafter_llm_model: str = Field(default="local")
+    drafter_llm_model: str = Field(default="kiteshield-gemma4:12b-q4km")
     drafter_llm_timeout_seconds: float = Field(default=5.0, gt=0, le=15)
+    # Invoice intake is opt-in. These never activate the existing Treasury mandate.
+    invoice_intake_enabled: bool = False
+    invoice_auto_execute_enabled: bool = False
+    invoice_live_execution_enabled: bool = False
+    invoice_inbox: str = "./invoice-inbox"
+    invoice_search_roots: list[str] = Field(default_factory=list, max_length=5)
+    invoice_agent_batch_limit: int = Field(default=3, ge=1, le=10)
+    invoice_poll_seconds: int = Field(default=15, ge=5, le=3600)
+    invoice_model: str = "kiteshield-gemma4:12b-q4km"
+    invoice_max_future_days: int = Field(default=90, ge=1, le=365)
+    invoice_max_overdue_days: int = Field(default=30, ge=0, le=365)
+    invoice_learned_evaluated: bool = False
+    invoice_learned_screening_enabled: bool = True
+
+    # Incoming testnet faucet only; no outgoing wallet permissions.
+    faucet_enabled: bool = False
+    faucet_mode: Literal["simulated", "sepolia"] = "simulated"
+    faucet_max_requests_24h: int = Field(default=3, ge=1, le=10)
+    cdp_api_key_id: str = Field(default="", repr=False)
+    cdp_api_key_secret: str = Field(default="", repr=False)
 
     @field_validator("drafter_recipient_aliases")
     @classmethod

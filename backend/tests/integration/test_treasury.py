@@ -84,6 +84,46 @@ async def activate(client):
 
 
 @pytest.mark.asyncio
+async def test_repeated_plan_mode_preserves_version_and_observer_claim(file_client, treasury_rpc):
+    client, factory = file_client
+    await configure(client)
+    async with factory() as session:
+        m = await session.get(TreasuryMandate, "global")
+        m.claim_token = "existing-observer"
+        m.claim_until = (datetime.now(UTC) + timedelta(seconds=90)).isoformat()
+        await session.commit()
+    response = await client.post(
+        "/api/v1/treasury/mode", headers=ADMIN,
+        json={"expected_version": 2, "mode": "plan_only"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["mandate"]["version"] == 2
+    async with factory() as session:
+        m = await session.get(TreasuryMandate, "global")
+        assert m.claim_token == "existing-observer"
+    response = await client.post("/api/v1/treasury/observe", headers=ADMIN)
+    assert response.status_code == 409
+    assert "Another observation" in response.text
+    treasury_rpc.eth.get_balance.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_observation_of_disabled_mandate_is_not_silent_success(file_client, treasury_rpc):
+    client, factory = file_client
+    await configure(client)
+    await client.post(
+        "/api/v1/treasury/mode", headers=ADMIN,
+        json={"expected_version": 2, "mode": "off"},
+    )
+    response = await client.post("/api/v1/treasury/observe", headers=ADMIN)
+    assert response.status_code == 409
+    assert "Enable plan-only" in response.text
+    treasury_rpc.eth.get_balance.assert_not_called()
+    async with factory() as session:
+        assert await session.scalar(select(func.count()).select_from(ExecutionAttempt)) == 0
+
+
+@pytest.mark.asyncio
 async def test_roles_and_plan_only_never_create_authority(file_client, treasury_rpc):
     client, factory = file_client
     assert (await client.get("/api/v1/treasury")).status_code == 401
@@ -223,6 +263,8 @@ async def test_suppression_and_network_errors_fail_closed(
     data = (await client.get("/api/v1/treasury", headers=PROPOSER)).json()["data"]
     if case == "balance":
         assert data["plan"]["state"] == "BELOW_TARGET"
+        assert "maximum_fee_reserve_wei" not in data["observation"]
+        assert "fee_quote" not in data["observation"]
 
 
 @pytest.mark.asyncio

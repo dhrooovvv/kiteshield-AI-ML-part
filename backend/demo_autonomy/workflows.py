@@ -161,7 +161,7 @@ class WorkflowEngine(Engine):
             ).fetchone()
             if not step:
                 db.execute("UPDATE tasks SET state='COMPLETED',reason=NULL WHERE id=?", (task_id,))
-                self.event(db, task_id, "TASK_COMPLETED", "SIMULATED")
+                self.event(db, task_id, "TASK_COMPLETED", self.settings.mode)
                 return
             if step["lease"] and step["lease"] > time.time():
                 return
@@ -183,7 +183,8 @@ class WorkflowEngine(Engine):
                     "WHERE task_id=? AND position=?",
                     (owner, time.time() + self.settings.lease_seconds, task_id, step["position"]),
                 )
-                self.event(db, task_id, "STEP_STARTED", step["tool"])
+                if step["state"] != "WAITING":
+                    self.event(db, task_id, "STEP_STARTED", step["tool"])
         if expired:
             self.hold(task_id, "STEP_DEADLINE_EXCEEDED")
             return
@@ -198,9 +199,14 @@ class WorkflowEngine(Engine):
                 if step["tool"] == "fund":
                     result = await self.fund(task, key, adapter, reconcile)
                 elif step["tool"] == "balance":
-                    with self.db() as db:
-                        value = db.execute("SELECT balance FROM ledger WHERE id=1").fetchone()[0]
-                    result = {"tool": "balance", "balance_wei": value, "mode": "SIMULATED"}
+                    if self.settings.mode == "SEPOLIA":
+                        result = await adapter.run(task, "balance", key, reconcile=reconcile)
+                    else:
+                        with self.db() as db:
+                            value = db.execute("SELECT balance FROM ledger WHERE id=1").fetchone()[
+                                0
+                            ]
+                        result = {"tool": "balance", "balance_wei": value, "mode": "SIMULATED"}
                 else:
                     # Every payment is bound to the original task; adapter rechecks again
                     # immediately before requesting existing coordinator execution.
@@ -251,12 +257,13 @@ class WorkflowEngine(Engine):
                     "UPDATE tasks SET state=?,reason=? WHERE id=?",
                     ("WAITING_APPROVAL" if exc.approval else "READY", str(exc), task_id),
                 )
-                self.event(
-                    db,
-                    task_id,
-                    "APPROVAL_REQUESTED" if exc.approval else "WAITING_RECEIPT",
-                    str(exc),
-                )
+                if task["reason"] != str(exc):
+                    self.event(
+                        db,
+                        task_id,
+                        "APPROVAL_REQUESTED" if exc.approval else "WAITING_RECEIPT",
+                        str(exc),
+                    )
         except HumanRequiredError as exc:
             with self.db() as db:
                 if str(exc) in {"POLICY_BLOCKED", "POLICY_REJECTED", "APPROVAL_EXPIRED"}:

@@ -1,3 +1,9 @@
+> **Update, 2 November 2026:** the user explicitly approved the scoped signing
+> integration. The vault is now deployed for bounded Sepolia use. Current design,
+> evidence and limitations are in [the integration note](../../docs/GUARDED_VAULT_INTEGRATION_2026-11-02.md)
+> and [completion report](../../docs/KITESHIELD_COMPLETION_2026-11-02.md).
+> The original NO-GO below records the earlier, unapproved research stage.
+
 # Guarded-vault enforcement spike — 1 November 2026
 
 **Decision: NO-GO for integration; GO for further isolated research.**

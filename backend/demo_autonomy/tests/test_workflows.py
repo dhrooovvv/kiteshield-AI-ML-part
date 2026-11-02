@@ -234,3 +234,16 @@ async def test_tightened_funding_cap_is_rechecked(engine):
     await engine.tick(task, adapter)
     assert engine.get(task)["reason"] == "TASK_FUNDING_BUDGET"
     assert not adapter.calls
+
+
+@pytest.mark.asyncio
+async def test_waiting_for_approval_emits_one_notification_not_one_per_poll(engine):
+    task = await new(engine, "request_notify", 60)
+    adapter = Adapter()
+    await advance(engine, task, adapter)
+    before = len(engine.get(task)["events"])
+    for _ in range(3):
+        await advance(engine, task, adapter)
+    events = engine.get(task)["events"]
+    assert len(events) == before
+    assert sum(e["kind"] == "APPROVAL_REQUESTED" for e in events) == 1

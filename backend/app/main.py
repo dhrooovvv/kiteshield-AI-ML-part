@@ -29,7 +29,12 @@ from app.api.routes import (
     security_router,
     transactions_router,
 )
+from app.api.routes.assistant import router as assistant_router
 from app.api.routes.economics import router as economics_router
+from app.api.routes.funding import router as funding_router
+from app.api.routes.invoices import router as invoices_router
+from app.api.routes.local_voice import router as local_voice_router
+from app.api.routes.vault import router as vault_router
 from app.api.routes.mandate_draft import router as mandate_draft_router
 from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.treasury import router as treasury_router
@@ -61,7 +66,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     await init_db()
     logger.info("Database initialized")
 
+    autonomy_context = None
+    autonomy_app = getattr(app.state, "autonomy_app", None)
+    if autonomy_app is not None:
+        autonomy_context = autonomy_app.router.lifespan_context(autonomy_app)
+        await autonomy_context.__aenter__()
+
     monitor_task = None
+    invoice_task = None
+    invoice_agent_task = None
+    if settings.invoice_intake_enabled:
+        from app.db import get_session_factory
+        from app.services.invoice_watcher import monitor as invoice_monitor
+
+        invoice_task = asyncio.create_task(
+            invoice_monitor(get_session_factory()), name="invoice-monitor"
+        )
+        from app.services.invoice_agent import monitor as command_monitor
+
+        invoice_agent_task = asyncio.create_task(
+            command_monitor(get_session_factory()), name="invoice-command-monitor"
+        )
     if settings.treasury_monitor_enabled:
         from app.db import get_session_factory
         from app.services.treasury import monitor
@@ -71,10 +96,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     try:
         yield
     finally:
+        if invoice_agent_task:
+            invoice_agent_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await invoice_agent_task
+        if invoice_task:
+            invoice_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await invoice_task
         if monitor_task:
             monitor_task.cancel()
             with suppress(asyncio.CancelledError):
                 await monitor_task
+        if autonomy_context is not None:
+            await autonomy_context.__aexit__(None, None, None)
         app.state.verified_rpc = None
         logger.info("Shutting down KiteShield Wallet backend")
 
@@ -130,8 +165,18 @@ def create_app() -> FastAPI:
     app.include_router(security_router, prefix="/api/v1")
     app.include_router(economics_router, prefix="/api/v1")
     app.include_router(portfolio_router, prefix="/api/v1")
+    app.include_router(funding_router, prefix="/api/v1")
+    app.include_router(assistant_router, prefix="/api/v1")
     app.include_router(treasury_router, prefix="/api/v1")
     app.include_router(mandate_draft_router, prefix="/api/v1")
+    app.include_router(invoices_router, prefix="/api/v1")
+    app.include_router(local_voice_router, prefix="/api/v1")
+    app.include_router(vault_router, prefix="/api/v1")
+
+    if settings.autonomy_enabled:
+        from demo_autonomy.integration import mount_autonomy
+
+        mount_autonomy(app, settings)
 
     return app
 

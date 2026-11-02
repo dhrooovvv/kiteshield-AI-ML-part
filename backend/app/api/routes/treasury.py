@@ -4,7 +4,7 @@ import json
 import re
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +48,10 @@ async def status_data(session):
     c = configured(m)
     used, cooldown = await history_limits(session, c)
     snapshot = json.loads(m.observation_json) if m.observation_json else None
+    # Keep conservative internal accounting intact, but do not present the
+    # configured ceiling as an estimated fee when no payable candidate exists.
+    if snapshot and not snapshot.get("fee_quote") and not snapshot.get("fee_error"):
+        snapshot.pop("maximum_fee_reserve_wei", None)
     result.update(
         mode=m.mode if m.enabled else "off",
         mandate={
@@ -95,7 +99,24 @@ async def plan_observation(session: Session, _: Admin):
     # Never execute from a manual observation, even for an execute-mode mandate.
     factory = async_sessionmaker(session.bind, expire_on_commit=False)
     await session.commit()
-    await tick(factory, plan_only=True)
+    outcome = await tick(factory, plan_only=True)
+    if outcome != "OBSERVED":
+        messages = {
+            "MANDATE_DISABLED": "Enable plan-only before observing this mandate.",
+            "OBSERVATION_BUSY": (
+                "Another observation is running. Wait a few seconds, then refresh or observe again."
+            ),
+            "MANDATE_CHANGED": (
+                "The mandate changed during observation. Refresh and observe its current version."
+            ),
+            "OBSERVATION_EXPIRED": (
+                "The observation timed out. Observe again; execution remains blocked."
+            ),
+        }
+        raise HTTPException(
+            status_code=409,
+            detail=messages.get(outcome, "Observation did not complete. Try again."),
+        )
     return APIResponse(data=await status_data(session))
 
 

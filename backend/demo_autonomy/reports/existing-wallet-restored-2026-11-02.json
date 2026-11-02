@@ -1,0 +1,29 @@
+{
+  "observed_at": "2026-11-02T11:29:19.828392+00:00",
+  "wallet_address": "0x3807fc9c3A8adF2d465290bbf06AE769DD08Ada7",
+  "ui": "http://localhost:3000",
+  "backend": "http://127.0.0.1:8128",
+  "database": "/Users/dhruv/Desktop/backend projects/ai wallet agent/backend/kiteshield.db",
+  "configuration_files_unchanged": true,
+  "policy_unchanged": true,
+  "health": {
+    "status": "healthy",
+    "service": "kiteshield-wallet",
+    "local_model": "kiteshield-gemma4:12b-q4km",
+    "version": "0.1.0",
+    "autonomy_demo": false,
+    "autonomy_profile": null,
+    "execution_mode": "sepolia",
+    "auto_execute_enabled": true,
+    "auto_execute_max_eth": "0.01",
+    "verified_chain_id": 11155111,
+    "verified_block_number": 12047843,
+    "rpc_verified_at": "2026-11-02T11:27:05.360110+00:00"
+  },
+  "confirmed_transactions": 19,
+  "new_transaction_count": 0,
+  "faucet_enabled": false,
+  "faucet_credentials_configured": false,
+  "new_task_orchestrator_enabled": false,
+  "separate_wallet_services_stopped": true
+}

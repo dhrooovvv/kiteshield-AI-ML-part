@@ -5,7 +5,7 @@ import secrets
 from contextlib import asynccontextmanager, suppress
 
 from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from demo_autonomy.engine import Engine, HumanRequiredError, Settings, SimulatedAdapter
 
@@ -15,8 +15,15 @@ class Mandate(BaseModel):
     supplier: str
     recipient: str
     payment_cap: int = Field(gt=0, le=10**15)
-    funding_cap: int = Field(gt=0, le=10**15)
-    approval_threshold: int = Field(default=1, ge=1, le=10**15)
+    funding_cap: int = Field(ge=0, le=10**18)
+    approval_threshold: int = Field(default=1, ge=1, le=10**24)
+
+    @field_validator("funding_cap", "approval_threshold", mode="before")
+    @classmethod
+    def decimal_budget(cls, value):
+        if isinstance(value, str) and value.isascii() and value.isdecimal():
+            return int(value)
+        return value
 
 
 class Goal(BaseModel):
@@ -28,10 +35,21 @@ class Goal(BaseModel):
 class Limits(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     payment_cap: int = Field(ge=0, le=10**15)
-    funding_cap: int = Field(ge=0, le=10**15)
+    funding_cap: int = Field(ge=0, le=10**18)
+
+    _decimal_budget = field_validator("funding_cap", mode="before")(Mandate.decimal_budget.__func__)
 
 
-def create_demo(settings: Settings, admin_token: str, agent_token: str, approver_token: str = ""):
+def create_demo(
+    settings: Settings,
+    admin_token: str,
+    agent_token: str,
+    approver_token: str = "",
+    core_app=None,
+    *,
+    engine_factory=None,
+    adapter_factory=None,
+):
     from demo_autonomy.workflows import WorkflowEngine
 
     if settings.workflows_enabled and not settings.wallet_services_enabled:
@@ -39,28 +57,48 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
     if settings.wallet_services_enabled and not settings.workflows_enabled:
         raise ValueError("Wallet services require workflow enforcement")
     if settings.workflows_enabled and (
-        len(approver_token) < 32 or approver_token in {admin_token, agent_token}
+        len(approver_token) < (16 if core_app is not None else 32)
+        or approver_token in {admin_token, agent_token}
     ):
         raise ValueError("Independent human approver credential required")
-    if len(admin_token) < 32 or len(agent_token) < 32 or admin_token == agent_token:
+    if (
+        len(admin_token) < (16 if core_app is not None else 32)
+        or len(agent_token) < (16 if core_app is not None else 32)
+        or admin_token == agent_token
+    ):
         raise ValueError("Independent demo credentials required")
-    engine = WorkflowEngine(settings) if settings.workflows_enabled else Engine(settings)
+    if settings.mode == "SEPOLIA" and (engine_factory is None or adapter_factory is None):
+        raise ValueError("Sepolia requires the separately guarded profile and adapter")
+    engine = (
+        engine_factory(settings)
+        if engine_factory
+        else WorkflowEngine(settings)
+        if settings.workflows_enabled
+        else Engine(settings)
+    )
 
-    def admin(authorization: str = Header(default="")):
-        if not secrets.compare_digest(authorization, "Bearer " + admin_token):
+    def credential(authorization, x_api_key):
+        return "Bearer " + x_api_key if core_app is not None else authorization
+
+    def admin(authorization: str = Header(default=""), x_api_key: str = Header(default="")):
+        if not secrets.compare_digest(
+            credential(authorization, x_api_key), "Bearer " + admin_token
+        ):
             raise HTTPException(403, "ADMIN_REQUIRED")
 
-    def agent(authorization: str = Header(default="")):
-        if not secrets.compare_digest(authorization, "Bearer " + agent_token):
+    def agent(authorization: str = Header(default=""), x_api_key: str = Header(default="")):
+        if not secrets.compare_digest(
+            credential(authorization, x_api_key), "Bearer " + agent_token
+        ):
             raise HTTPException(403, "AGENT_REQUIRED")
 
     def enabled():
         if not settings.enabled:
             raise HTTPException(503, "AUTONOMY_DISABLED")
 
-    def approver(authorization: str = Header(default="")):
+    def approver(authorization: str = Header(default=""), x_api_key: str = Header(default="")):
         if not approver_token or not secrets.compare_digest(
-            authorization, "Bearer " + approver_token
+            credential(authorization, x_api_key), "Bearer " + approver_token
         ):
             raise HTTPException(403, "HUMAN_APPROVER_REQUIRED")
 
@@ -92,7 +130,11 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
             if settings.wallet_services_enabled:
                 from demo_autonomy.sandbox import WalletServicesAdapter
 
-                adapter = WalletServicesAdapter(engine)
+                adapter = (
+                    adapter_factory(engine, core_app)
+                    if adapter_factory
+                    else WalletServicesAdapter(engine, core_app=core_app)
+                )
                 await adapter.initialize()
             else:
                 adapter = SimulatedAdapter(engine)
@@ -106,17 +148,19 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
             if settings.wallet_services_enabled:
                 await app.state.adapter.close()
 
-    app = FastAPI(title="KiteShield autonomous demo — SIMULATED", lifespan=lifespan)
+    app = FastAPI(title="KiteShield autonomous wallet — " + settings.mode, lifespan=lifespan)
     app.state.engine = engine
 
     @app.get("/health")
     def health():
         return {
-            "profile": "isolated-demo",
-            "mode": "SIMULATED",
+            "profile": settings.wallet_source,
+            "mode": settings.mode,
             "enabled": settings.enabled,
             "planner_enabled": settings.planner_enabled,
-            "signing": "test-key-only" if settings.wallet_services_enabled else False,
+            "signing": (settings.wallet_source if settings.mode == "SEPOLIA" else "test-key-only")
+            if settings.wallet_services_enabled
+            else False,
             "workflows_enabled": settings.workflows_enabled,
             "quarantine_enabled": settings.quarantine_enabled,
         }
@@ -132,7 +176,7 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
             engine.configure(**values)
         except (ValueError, HumanRequiredError) as exc:
             raise HTTPException(422, str(exc)) from exc
-        return {"mode": "SIMULATED", "saved": True}
+        return {"mode": settings.mode, "saved": True}
 
     @app.post("/goals", dependencies=[Depends(enabled), Depends(agent)])
     def goal(payload: Goal):
@@ -140,12 +184,12 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
             task_id = engine.create(**payload.model_dump())
         except (ValueError, HumanRequiredError) as exc:
             raise HTTPException(422, str(exc)) from exc
-        return {"task_id": task_id, "mode": "SIMULATED"}
+        return {"task_id": task_id, "mode": settings.mode}
 
     @app.get("/goals/{task_id}", dependencies=[Depends(enabled), Depends(agent)])
     def get(task_id: str):
         try:
-            return engine.get(task_id)
+            return task_response(engine.get(task_id))
         except KeyError as exc:
             raise HTTPException(404, "TASK_NOT_FOUND") from exc
 
@@ -159,15 +203,49 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
             raise HTTPException(404, "TASK_NOT_FOUND") from exc
         return {"tightened": True}
 
+    @app.post(
+        "/goals/{task_id}/resume-before-signing", dependencies=[Depends(enabled), Depends(admin)]
+    )
+    async def resume_before_signing(task_id: str):
+        adapter = getattr(app.state, "adapter", None)
+        if not adapter or not hasattr(adapter, "resume_before_signing"):
+            raise HTTPException(503, "PRE_SIGN_RECOVERY_UNAVAILABLE")
+        try:
+            return await adapter.resume_before_signing(task_id)
+        except KeyError as exc:
+            raise HTTPException(404, "TASK_NOT_FOUND") from exc
+        except HumanRequiredError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/goals/{task_id}/reconcile", dependencies=[Depends(enabled), Depends(agent)])
+    async def reconcile(task_id: str):
+        from demo_autonomy.sandbox import WaitingError
+
+        adapter = getattr(app.state, "adapter", None)
+        if not adapter or not hasattr(adapter, "reconcile_existing_payment"):
+            raise HTTPException(503, "READ_ONLY_RECONCILIATION_UNAVAILABLE")
+        try:
+            return await adapter.reconcile_existing_payment(task_id)
+        except KeyError as exc:
+            raise HTTPException(404, "TASK_NOT_FOUND") from exc
+        except (HumanRequiredError, WaitingError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     def workflows():
         if not settings.workflows_enabled:
             raise HTTPException(503, "WORKFLOWS_DISABLED")
+
+    def task_response(task):
+        if settings.mode == "SEPOLIA":
+            # A funding allowance can exceed JavaScript's exact integer range.
+            task["funding_cap"] = str(task["funding_cap"])
+        return task
 
     @app.get("/snapshot", dependencies=[Depends(enabled), Depends(agent)])
     def snapshot():
         with engine.db() as db:
             tasks = [
-                engine.get(r[0])
+                task_response(engine.get(r[0]))
                 for r in db.execute("SELECT id FROM tasks ORDER BY rowid DESC LIMIT 50")
             ]
             issues = (
@@ -178,12 +256,31 @@ def create_demo(settings: Settings, admin_token: str, agent_token: str, approver
                 if settings.workflows_enabled
                 else []
             )
+            mandate_row = db.execute("SELECT * FROM mandates WHERE id=1").fetchone()
+            mandate = dict(mandate_row) if mandate_row else None
+            if mandate:
+                mandate["funding_cap"] = str(mandate["funding_cap"])
+            system_events = [
+                dict(row)
+                for row in db.execute(
+                    "SELECT * FROM events WHERE task_id='system' ORDER BY id DESC LIMIT 30"
+                )
+            ]
         return {
             "tasks": tasks,
             "issues": issues,
             "control": engine.control() if settings.workflows_enabled else {},
-            "mode": "SIMULATED",
+            "mode": settings.mode,
+            "wallet_source": settings.wallet_source,
+            "mandate": mandate,
+            "system_events": system_events,
         }
+
+    @app.get("/wallet", dependencies=[Depends(enabled), Depends(agent)])
+    async def wallet():
+        if settings.mode != "SEPOLIA":
+            return {"mode": settings.mode}
+        return await app.state.adapter.wallet_status()
 
     class Decision(BaseModel):
         model_config = ConfigDict(extra="forbid", strict=True)

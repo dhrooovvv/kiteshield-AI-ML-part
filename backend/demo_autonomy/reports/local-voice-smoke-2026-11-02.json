@@ -1,0 +1,13 @@
+{
+  "fixture": "pinned upstream samples/jfk.wav",
+  "result": {
+    "transcript": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+    "untrusted": true,
+    "authorizes": false,
+    "requires_review": true,
+    "local": true,
+    "engine": "whisper.cpp"
+  },
+  "microphone_tested": false,
+  "accuracy_evaluation": false
+}

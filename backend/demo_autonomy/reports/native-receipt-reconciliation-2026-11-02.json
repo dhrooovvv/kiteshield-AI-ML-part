@@ -1,0 +1,36 @@
+{
+  "tx_hash": "0x6663a2791e7e48a2cfb0efce20156155cbfa9ae21bd61172dc806026f2a223b5",
+  "limits": [
+    {
+      "task_id": "d785d13e-f757-44a9-9728-1dcda1f3537b",
+      "limits_json": "{\"sender\": \"0x3807fc9c3A8adF2d465290bbf06AE769DD08Ada7\", \"recipient\": \"0x229D5588641f2614e3F486c853D8BA0eC5FFe811\", \"amount_wei\": \"10000000000000\", \"chain_id\": 11155111, \"nonce\": 19, \"max_gas_units\": 30240, \"max_fee_per_gas_wei\": 64, \"max_priority_fee_per_gas_wei\": 4, \"max_total_cost_wei\": \"10000001935360\"}",
+      "sign_started": 1
+    }
+  ],
+  "rpc_evidence": {
+    "eth_getTransactionByHash": {
+      "hash": "0x6663a2791e7e48a2cfb0efce20156155cbfa9ae21bd61172dc806026f2a223b5",
+      "from": "0x3807fc9c3a8adf2d465290bbf06ae769dd08ada7",
+      "to": "0x229d5588641f2614e3f486c853d8ba0ec5ffe811",
+      "value": "0x9184e72a000",
+      "input": "0x",
+      "chainId": "0xaa36a7",
+      "nonce": "0x13",
+      "gas": "0x6270",
+      "maxFeePerGas": "0x20",
+      "maxPriorityFeePerGas": "0x2",
+      "blockHash": "0x25609fdd9bd8f30ad71eb841cb24a41b550f3b0ba0e1f7871222bf6814824145",
+      "blockNumber": "0xb7db3a"
+    },
+    "eth_getTransactionReceipt": {
+      "transactionHash": "0x6663a2791e7e48a2cfb0efce20156155cbfa9ae21bd61172dc806026f2a223b5",
+      "from": "0x3807fc9c3a8adf2d465290bbf06ae769dd08ada7",
+      "to": "0x229d5588641f2614e3f486c853d8ba0ec5ffe811",
+      "blockHash": "0x25609fdd9bd8f30ad71eb841cb24a41b550f3b0ba0e1f7871222bf6814824145",
+      "blockNumber": "0xb7db3a",
+      "status": "0x1",
+      "gasUsed": "0x5208",
+      "effectiveGasPrice": "0x11"
+    }
+  }
+}
