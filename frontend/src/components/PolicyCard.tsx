@@ -142,7 +142,7 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
       <>
         <div className="glass-panel policy-panel" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
           <ShieldAlert size={32} color="var(--color-amber)" style={{ marginBottom: '10px' }} />
-          <p>No active security policy found in system.</p>
+          <p>No active policy loaded. Connect a role or refresh to check.</p>
           <p className="required-role-note">{hasRequiredRole ? 'Policy-edit permission verified.' : 'Requires Policy administrator, or Demo administrator in simulation. Connect it using Switch role.'}</p>
           <button className="btn btn-primary" style={{ marginTop: '14px' }} ref={triggerRef} onClick={openEditor} disabled={!hasRequiredRole}>
             Create Initial Policy

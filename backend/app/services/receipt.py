@@ -55,6 +55,14 @@ async def reconcile_receipt(
     """
     if tx.execution_mode != "sepolia" or not tx.tx_hash or tx.status in ("CONFIRMED", "FAILED"):
         return False
+    from app.models import VaultOperation
+    from app.services.vault_execution import reconcile_operation
+
+    vault_op = await session.scalar(
+        select(VaultOperation).where(VaultOperation.proposal_id == tx.proposal_id)
+    )
+    if vault_op:
+        return await reconcile_operation(session, vault_op, blockchain, AuditService())
     receipt = await blockchain.get_transaction_receipt(tx.tx_hash)
     if receipt is None:
         return False
@@ -115,8 +123,10 @@ async def reconcile_receipt(
     intent = await session.get(AutonomousIntent, proposal.id)
     if intent and intent.started:
         await AuditService().record_event(
-            session, event_type="AUTO_EXECUTION_CONFIRM" if success else "AUTO_EXECUTION_FAILURE",
-            correlation_id=proposal.correlation_id, actor="autonomous_executor",
+            session,
+            event_type="AUTO_EXECUTION_CONFIRM" if success else "AUTO_EXECUTION_FAILURE",
+            correlation_id=proposal.correlation_id,
+            actor="autonomous_executor",
             details={"proposal_id": proposal.id, "tx_hash": tx.tx_hash},
         )
     return True

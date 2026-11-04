@@ -3,6 +3,7 @@ import { api } from '../api/client.ts';
 import type { PortfolioSnapshot } from '../portfolio.ts';
 import { initialPortfolioRead, portfolioReadReducer } from '../portfolio.ts';
 import { humanizeEvent } from '../auditPresentation.ts';
+import { MessageSquare } from 'lucide-react';
 
 const shortAddress = (value: string) => value.length > 20
   ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
@@ -100,7 +101,7 @@ export function PortfolioContent({ data, snapshotAgeSeconds }: {
   </div>;
 }
 
-export function PortfolioView({ refreshRevision }: { refreshRevision: number }) {
+export function PortfolioView({ refreshRevision, onOpenAssistant }: { refreshRevision: number; onOpenAssistant?: () => void }) {
   const [{ data, error, refreshing, loadedAt }, dispatch] = useReducer(
     portfolioReadReducer, initialPortfolioRead,
   );
@@ -126,6 +127,7 @@ export function PortfolioView({ refreshRevision }: { refreshRevision: number }) 
     return () => { cancelled = true; controller.abort(); };
   }, [refreshRevision]);
   return <div className="portfolio-content">
+    {onOpenAssistant && <div className="portfolio-funding-toolbar"><button className="btn btn-outline" onClick={onOpenAssistant}><MessageSquare size={16} /> Ask KiteShield</button></div>}
     {data && refreshing && <p className="required-role-note" role="status">
       Refreshing — showing stale snapshot · age {Math.max(0, Math.floor((clock - (loadedAt ?? clock)) / 1000))}s.
     </p>}

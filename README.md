@@ -4,6 +4,12 @@ KiteShield is a constrained wallet authorization prototype for the 2026 Shenzhen
 
 The agent proposes; deterministic policy authorizes; the signer revalidates before signing. Model output never grants permission to spend.
 
+Accounts Payable adds opt-in invoice intake with local Gemma, a fixed vendor registry
+and an offline red-team scoreboard. See [setup and demonstration](docs/ACCOUNTS_PAYABLE.md),
+[measured build results](docs/ACCOUNTS_PAYABLE_BUILD_REPORT_2026-10-24.md) and
+[model/dependency licenses](LICENSES.md). Invoice live execution defaults off;
+synthetic simulation results are not live-payment evidence.
+
 ## Implemented scope
 
 - Natural-language and structured native ETH payment proposals, with exact integer-wei amounts.
@@ -292,3 +298,29 @@ available on demand. Verification controls retain their existing semantics.
 2026 Shenzhen International FinTechathon · International Track · Topic F: Agent Wallet. The stated deadline is October 20, 2026; confirm submission timing and requirements against the official rules.
 
 Package metadata declares MIT licensing. Review third-party model, dataset and dependency licenses separately before redistribution.
+
+
+## Voice and autonomous invoice commands
+
+See [voice/invoice setup, demonstration and verification](docs/VOICE_INVOICE_AGENT_2026-10-27.md). The isolated demo uses real local models and simulated payments; it does not broadcast.
+
+
+## Connected main-project invoice workflow
+
+See [main app ports, folders, restart commands and authorization limits](docs/MAIN_PROJECT_INTEGRATION_2026-10-27.md). Main dashboard: port 3000; separate autonomous simulator: port 4319.
+
+
+## Real Sepolia assistant autonomy
+
+See [live main startup, suffix matching, limits and untested changes](docs/LIVE_MAIN_AUTONOMY_2026-10-27.md). The live main launcher is `scripts.run_main_live`; the preparation launcher intentionally keeps execution disabled.
+
+
+### Current main-app integration (2 November 2026)
+
+See [the completion report](docs/KITESHIELD_COMPLETION_2026-11-02.md) for the
+existing-wallet deployment at localhost:3000, confirmed Sepolia vault payment,
+implemented features and remaining CDP funding setup. The optional voice,
+observer and vault flags remain off in example configurations. The guarded vault
+uses the existing signer, exact typed calls and separate owner/agent identities;
+[authority boundaries and evidence](docs/GUARDED_VAULT_INTEGRATION_2026-11-02.md)
+include the limitations of this bounded testnet deployment.

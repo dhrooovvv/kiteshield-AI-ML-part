@@ -1,5 +1,6 @@
 import { MandateDraftBox } from '../components/MandateDraftBox.tsx';
-import { applyMandateDraft } from '../mandateDraft.ts';
+import { mandateDraftFields } from '../mandateDraft.ts';
+import { previewTreasury, saveAndPreviewTreasury } from '../treasuryWorkflow.ts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
@@ -104,13 +105,14 @@ function TreasuryHistoryDialog({ title, onClose, children }: { title: string; on
 }
 
 export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Props) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const [formValues, setFormValues] = useState<Record<string, string>>({});
   const admin = useRole('policyAdmin');
   const roles = useConnectedRoles();
   const [status, setStatus] = useState<TreasuryStatus | null>(null);
   const [actions, setActions] = useState<TreasuryAction[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<number | null>(null);
   const [editing, setEditing] = useState<number | null>(null);
@@ -131,10 +133,14 @@ export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Pr
     return () => { active = false; clearInterval(timer); };
   }, [refresh, refreshRevision, roles]);
   const executeBlockers = status ? treasuryExecuteBlockers(status, admin) : [];
+  const field = (name: string, fallback: string | number = '') => ({
+    value: formValues[name] ?? String(fallback),
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => setFormValues(values => ({ ...values, [name]: event.target.value })),
+  });
   const perform = async (task: () => Promise<unknown>) => {
-    setBusy(true); setError(null);
+    setBusy(true); setError(null); setActionError(null);
     try { await task(); setConfirm(null); setEditing(null); await refresh(); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Operation failed'); }
+    catch (err) { await refresh(); setActionError(err instanceof Error ? err.message : 'Operation failed'); }
     finally { setBusy(false); }
   };
   const save = (event: React.FormEvent<HTMLFormElement>) => {
@@ -147,11 +153,15 @@ export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Pr
         sweep_maximum_wei: ethToWei(text('maximum')), minimum_excess_wei: ethToWei(text('minimum')),
         cooldown_seconds: Number(text('cooldown')), daily_action_limit: Number(text('daily')),
         freshness_seconds: Number(text('freshness')) };
-      await api.saveTreasury(config, editing!);
+      const preview = await saveAndPreviewTreasury(config, editing!, saved => {
+        setStatus(saved); setEditing(null); setConfirm(null);
+      });
+      setStatus(preview);
     });
   };
   return <div className="treasury-page">
     {error && <p role="alert" className="state-panel state-error">{error}</p>}
+    {actionError && <p role="alert" className="state-panel state-error">{actionError}</p>}
     {!status ? <button className="btn btn-outline" onClick={() => void refresh()}>Reload treasury status</button> : <>
       <TreasurySummary status={status} latestAction={actions.find(action => action.proposal_id !== null)} activity={
         <section className="treasury-actions" aria-labelledby="treasury-activity-heading">
@@ -164,33 +174,37 @@ export function TreasuryView({ refreshRevision, onOpenAudit, onOpenDetails }: Pr
         {!admin && <p>Policy administrator required to configure, observe or activate a mandate.</p>}
         <div className="treasury-buttons">
           <button className="btn btn-outline" onClick={() => void refresh()} disabled={busy}>Refresh status (read-only)</button>
-          <button className="btn btn-outline" disabled={!admin || busy} onClick={() => { setError(null); setEditing(status.mandate?.version ?? 0); }}>Configure mandate</button>
-          <button className="btn btn-outline" disabled={!admin || busy || !status.mandate} onClick={() => void perform(() => api.setTreasuryMode('plan_only', status.mandate!.version))}>Enable plan-only</button>
-          <button className="btn btn-outline" disabled={!admin || busy || status.mode === 'off'} onClick={() => void perform(() => api.observeTreasury())}>Observe once · plan-only</button>
+          <button className="btn btn-outline" disabled={!admin || busy} onClick={() => { setError(null); setFormValues({}); setEditing(status.mandate?.version ?? 0); }}>Configure mandate</button>
+          <button className="btn btn-outline" disabled={!admin || busy || !status.mandate} onClick={() => void perform(async () => { setStatus(await previewTreasury(status)); })}>Refresh preview</button>
           <button className="btn btn-emerald" aria-describedby="treasury-execute-requirements" disabled={busy || executeBlockers.length > 0} onClick={() => setConfirm(status.mandate!.version)}>Enable execute…</button>
           <button className="btn btn-outline" disabled={!admin || busy || status.mode === 'off'} onClick={() => void perform(() => api.setTreasuryMode('off', status.mandate!.version))}>Disable</button>
         </div>
+        <details><summary>Advanced controls</summary>
+          <button className="btn btn-outline" disabled={!admin || busy || !status.mandate} onClick={() => void perform(() => api.setTreasuryMode('plan_only', status.mandate!.version))}>Enable plan-only</button>
+          <button className="btn btn-outline" disabled={!admin || busy || status.mode === 'off'} onClick={() => void perform(() => api.observeTreasury())}>Observe once · plan-only</button>
+        </details>
         <div id="treasury-execute-requirements" aria-live="polite">
           {executeBlockers.length > 0 && status.mode !== 'execute' && <><p>Before enabling execute:</p><ul>{executeBlockers.map(reason => <li key={reason}>{reason}</li>)}</ul></>}
         </div>
         {confirm !== null && <div className="treasury-confirm" role="group" aria-label="Confirm standing spending permission"><h3>Grant standing execution permission?</h3><p>This allows unattended sweeps to the designated recipient within this mandate and current policy. Disabling prevents fresh signing but cannot cancel a signed or broadcast transaction.</p>{confirm !== status.mandate?.version && <p role="alert">The mandate changed. Cancel and review its new configuration before confirming.</p>}<button className="btn btn-emerald" disabled={busy || !admin || confirm !== status.mandate?.version || executeBlockers.length > 0} onClick={() => void perform(() => api.setTreasuryMode('execute', confirm, true))}>Confirm standing permission</button><button className="btn btn-outline" disabled={busy} onClick={() => setConfirm(null)}>Cancel</button></div>}
         {editing !== null && <TreasuryConfigurationDialog busy={busy} onClose={() => setEditing(null)}>
-        {error && <p role="alert" className="state-panel state-error">{error}</p>}
-        <form ref={formRef} onSubmit={save} className="treasury-form"><p>Saving disables this mandate and invalidates old unsigned proposals. Cooldown and action history are retained.</p>{editing !== (status.mandate?.version ?? 0) && <p role="alert">The mandate changed. Close configuration and reopen it before saving.</p>}
+        {(error || actionError) && <p role="alert" className="state-panel state-error">{actionError ?? error}</p>}
+        <form onSubmit={save} className="treasury-form"><p>Save &amp; preview saves your rules and checks eligibility in plan-only mode. It does not enable payments. Old unsigned proposals are invalidated; cooldown and action history are retained.</p>{editing !== (status.mandate?.version ?? 0) && <p role="alert">The mandate changed. Close configuration and reopen it before saving.</p>}
           <MandateDraftBox disabled={!admin || busy || editing !== (status.mandate?.version ?? 0)} onApply={draft => {
-            if (formRef.current) applyMandateDraft(formRef.current, draft);
+            const values = mandateDraftFields(draft);
+            if (values) setFormValues(values);
           }} />
-          <label>Sweep recipient<input name="recipient" required defaultValue={status.mandate?.recipient} /></label>
-          <label>Target balance (ETH)<input name="target" inputMode="decimal" required defaultValue={status.mandate ? weiToEth(status.mandate.target_balance_wei) : ''} /></label>
-          <label>Maximum sweep (ETH)<input name="maximum" inputMode="decimal" required defaultValue={status.mandate ? weiToEth(status.mandate.sweep_maximum_wei) : '0.00003'} /></label>
-          <label>Minimum excess after fees (ETH)<input name="minimum" inputMode="decimal" required defaultValue={status.mandate ? weiToEth(status.mandate.minimum_excess_wei) : '0.00002'} /></label>
-          <label>Cooldown (seconds)<input name="cooldown" type="number" min="60" max="86400" required defaultValue={status.mandate?.cooldown_seconds ?? 600} /></label>
-          <label>Maximum actions per UTC day<input name="daily" type="number" min="1" max="100" required defaultValue={status.mandate?.daily_action_limit ?? 3} /></label>
-          <label>Observation freshness (seconds)<input name="freshness" type="number" min="15" max="300" required defaultValue={status.mandate?.freshness_seconds ?? 60} /></label>
+          <label>Sweep recipient<input name="recipient" required {...field('recipient', status.mandate?.recipient)} /></label>
+          <label>Target balance (ETH)<input name="target" inputMode="decimal" required {...field('target', status.mandate ? weiToEth(status.mandate.target_balance_wei) : '')} /></label>
+          <label>Maximum sweep (ETH)<input name="maximum" inputMode="decimal" required {...field('maximum', status.mandate ? weiToEth(status.mandate.sweep_maximum_wei) : '0.00003')} /></label>
+          <label>Minimum excess after fees (ETH)<input name="minimum" inputMode="decimal" required {...field('minimum', status.mandate ? weiToEth(status.mandate.minimum_excess_wei) : '0.00002')} /></label>
+          <label>Cooldown (seconds)<input name="cooldown" type="number" min="60" max="86400" required {...field('cooldown', status.mandate?.cooldown_seconds ?? 600)} /></label>
+          <label>Maximum actions per UTC day<input name="daily" type="number" min="1" max="100" required {...field('daily', status.mandate?.daily_action_limit ?? 3)} /></label>
+          <label>Observation freshness (seconds)<input name="freshness" type="number" min="15" max="300" required {...field('freshness', status.mandate?.freshness_seconds ?? 60)} /></label>
           <footer className="treasury-config-footer">
-            <span>{busy ? 'Saving mandate…' : 'Execution requires separate confirmation.'}</span>
+            <span>{busy ? 'Saving and preparing preview…' : 'Execution requires separate confirmation.'}</span>
             <button type="button" className="btn btn-outline" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
-            <button className="btn btn-emerald" disabled={busy || !admin || editing !== (status.mandate?.version ?? 0)}>Save disabled mandate</button>
+            <button className="btn btn-emerald" disabled={busy || !admin || editing !== (status.mandate?.version ?? 0)}>Save &amp; preview</button>
           </footer>
         </form></TreasuryConfigurationDialog>}
         {busy && <p role="status">Updating treasury…</p>}

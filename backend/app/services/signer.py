@@ -108,6 +108,12 @@ class IsolatedSigner:
             TokenMismatchError: Transaction params don't match token
             SigningRejectedError: Any other verification failure
         """
+        from app.models import VaultOperation
+
+        if await session.scalar(
+            select(VaultOperation.id).where(VaultOperation.proposal_id == action.proposal_id)
+        ):
+            raise SigningRejectedError("Vault proposal cannot use the native signing path")
         await lock_execution(session)
         await emergency_stop_service.require_running(session)
         # ===== STEP 1: Verify JWT signature and basic claims =====
@@ -295,6 +301,55 @@ class IsolatedSigner:
         await session.flush()
 
         return signed_tx
+
+    async def sign_vault_operation(self, session, token, operation_id, blockchain):
+        """Recheck exact calldata, administrator intent, session and one-use token."""
+        from app.models import VaultCapability, VaultOperation
+        from app.services.vault import agent_key, digest, validate_operation
+
+        await lock_execution(session)
+        claims = self._capability_service.verify_vault_token(token)
+        op = await session.get(VaultOperation, operation_id, populate_existing=True)
+        if not op or op.status != "PREPARED":
+            raise SigningRejectedError("Vault operation is not prepared")
+        payload = await validate_operation(session, op, blockchain, envelope=True)
+        expected = dict(
+            operation_id=op.id,
+            payload_digest=op.authority_digest,
+            envelope_digest=digest(op.envelope),
+            sender=op.sender,
+            kind=op.kind,
+            policy_version=op.policy_version,
+            approval_id=op.approval_id,
+            execution_mode=op.execution_mode,
+            sub=op.authorized_by,
+        )
+        if any(claims.get(key) != value for key, value in expected.items()):
+            raise TokenMismatchError("Vault capability does not match the durable exact call")
+        consumed = await session.execute(
+            update(VaultCapability)
+            .where(
+                VaultCapability.jti == claims["jti"],
+                VaultCapability.operation_id == op.id,
+                VaultCapability.digest == digest(op.envelope),
+                VaultCapability.consumed.is_(False),
+            )
+            .values(consumed=True)
+        )
+        if consumed.rowcount != 1:
+            raise TokenConsumedError("Unknown or consumed vault authorization")
+        key = agent_key() if payload.agent_operation else self._load_key()
+        from eth_account import Account
+
+        if Account.from_key(key).address.lower() != op.sender:
+            raise SigningRejectedError("Signing identity changed")
+        envelope = json.loads(op.envelope)
+        signed = self._sign_eth_transaction(
+            key, envelope.get("to"), envelope["value"], 11155111, envelope
+        )
+        op.status = "SIGNED"
+        await session.flush()
+        return signed
 
     def _sign_eth_transaction(
         self,

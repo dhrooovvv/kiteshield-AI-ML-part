@@ -52,6 +52,9 @@ out/
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite3-wal
+*.sqlite3-shm
+backend/autonomy-state/
 
 # ---- IDE ----
 .vscode/

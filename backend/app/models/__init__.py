@@ -104,6 +104,8 @@ class Proposal(Base):
         "Transaction", back_populates="proposal", uselist=False, lazy="selectin"
     )
     treasury_action = relationship("TreasuryAction", uselist=False, lazy="selectin")
+    invoice_record = relationship("InvoiceRecord", uselist=False, lazy="selectin")
+    vault_operation = relationship("VaultOperation", uselist=False, lazy="selectin")
 
 
 class PolicyDecision(Base):
@@ -340,4 +342,14 @@ class ExecutionAttempt(Base):
 
 
 # Register additive tables on the same metadata, including old-database startup.
+from app.models.assistant import AssistantPaymentDraft, AssistantVendorBinding  # noqa: E402,F401
+from app.models.funding import FundingRequest  # noqa: E402,F401
+from app.models.invoice_agent import InvoiceAgentItem, InvoiceAgentTask  # noqa: E402,F401
+from app.models.invoices import (  # noqa: E402,F401
+    InvoiceEvent,
+    InvoiceIdleState,
+    InvoiceRecord,
+    Vendor,
+)
 from app.models.treasury import TreasuryAction, TreasuryMandate  # noqa: E402,F401
+from app.models.vault import VaultCapability, VaultOperation, VaultRegistry  # noqa: E402,F401

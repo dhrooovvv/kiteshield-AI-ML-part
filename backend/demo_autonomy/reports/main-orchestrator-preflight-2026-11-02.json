@@ -1,0 +1,26 @@
+{
+  "wallet": "0x3807fc9c3A8adF2d465290bbf06AE769DD08Ada7",
+  "chain_id": 11155111,
+  "balance_wei": "49669999998391400",
+  "read_only_preflight": {
+    "to": "0x229D5588641f2614e3F486c853D8BA0eC5FFe811",
+    "value": 10000000000000,
+    "chainId": 11155111,
+    "nonce": 19,
+    "gas": 25200,
+    "maxFeePerGas": 34,
+    "maxPriorityFeePerGas": 2,
+    "type": 2
+  },
+  "fee_ceiling_wei": "856800",
+  "model_plan": {
+    "steps": [
+      "balance",
+      "fund",
+      "payment",
+      "receipt"
+    ]
+  },
+  "signed": false,
+  "broadcast": false
+}

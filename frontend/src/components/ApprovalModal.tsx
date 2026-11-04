@@ -124,6 +124,12 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
               </div>
             </div>
 
+            {approval.vault && <div>
+              <span style={{color: 'var(--text-dim)', display: 'block'}}>Guarded vault · exact session binding</span>
+              <p style={{overflowWrap: 'anywhere'}}>{approval.vault.address}</p>
+              <p>Epoch {approval.vault.epoch} · session nonce {approval.vault.session_nonce}</p>
+              <details><summary>Bound call digest</summary><p style={{overflowWrap: 'anywhere'}}>{approval.vault.payload_digest}</p></details>
+            </div>}
             <div>
               <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', display: 'block' }}>Cryptographic Action Digest (SHA-256)</span>
               <span className="font-mono" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>

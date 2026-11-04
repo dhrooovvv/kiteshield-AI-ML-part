@@ -36,9 +36,19 @@ async def validate_authorization(
     approval_id: str | None,
 ) -> None:
     """Never trust a caller's ALLOW/requires_approval claims."""
+    from app.services.invoices import validate_invoice_authority
     from app.services.treasury import validate_mandate_authority
+    from app.services.vault import action_for_proposal
+    from app.services.vendor_payments import validate_vendor_authority
 
+    bound_proposal = await session.get(Proposal, action.proposal_id, populate_existing=True)
+    if bound_proposal:
+        expected = await action_for_proposal(session, bound_proposal)
+        if action.action_digest_without_nonce() != expected.action_digest_without_nonce():
+            raise SigningRejectedError("Action does not match the persisted payment backend")
+    await validate_invoice_authority(session, action)
     await validate_mandate_authority(session, action)
+    await validate_vendor_authority(session, action)
     proposal = await session.get(Proposal, action.proposal_id, populate_existing=True)
     policy = await session.scalar(
         select(Policy).where(Policy.is_active.is_(True)).order_by(Policy.version.desc()).limit(1)

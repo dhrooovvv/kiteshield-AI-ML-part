@@ -1,94 +1,70 @@
-import React from 'react';
-import {
-  LayoutDashboard,
-  Send,
-  UserCheck,
-  ShieldCheck,
-  History,
-  Wallet,
-  Repeat,
-} from 'lucide-react';
+import { Inbox, Layers, Repeat, Wallet } from 'lucide-react';
 
-export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury';
+export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury' | 'invoices' | 'autonomy';
+
+const reviewTabs = [
+  { id: 'approvals', label: 'Human Approvals' },
+  { id: 'proposals', label: 'Proposals' },
+  { id: 'policies', label: 'Policy Engine' },
+  { id: 'audit', label: 'Audit Explorer' },
+] satisfies { id: NavTab; label: string }[];
+
+const workflowTabs = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'treasury', label: 'Treasury Autopilot' },
+  { id: 'invoices', label: 'Accounts Payable' },
+] satisfies { id: NavTab; label: string }[];
+
+function workspaceSection(tab: NavTab) {
+  if (reviewTabs.some(item => item.id === tab)) return 'review';
+  if (workflowTabs.some(item => item.id === tab)) return 'workflows';
+  return tab;
+}
 
 interface NavigationProps {
+  autonomyEnabled?: boolean;
   currentTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   pendingApprovalsCount: number;
   promptReviewsCount: number;
-  totalProposalsCount: number;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({
-  currentTab,
-  onTabChange,
-  pendingApprovalsCount,
-  promptReviewsCount,
-  totalProposalsCount,
-}) => {
+export function Navigation({
+  autonomyEnabled, currentTab, onTabChange, pendingApprovalsCount, promptReviewsCount,
+}: NavigationProps) {
+  const section = workspaceSection(currentTab);
+  const attention = pendingApprovalsCount + promptReviewsCount;
   const tabs = [
-    {
-      id: 'overview' as NavTab,
-      label: 'Overview',
-      icon: <LayoutDashboard size={18} />,
-    },
-    { id: 'portfolio' as NavTab, label: 'Portfolio', icon: <Wallet size={18} /> },
-    { id: 'treasury' as NavTab, label: 'Treasury Autopilot', icon: <Repeat size={18} /> },
-    {
-      id: 'proposals' as NavTab,
-      label: 'Proposals',
-      icon: <Send size={18} />,
-      badge: totalProposalsCount > 0 ? totalProposalsCount : undefined,
-    },
-    {
-      id: 'approvals' as NavTab,
-      label: 'Human Approvals',
-      icon: <UserCheck size={18} />,
-      badge: pendingApprovalsCount + promptReviewsCount > 0 ? pendingApprovalsCount + promptReviewsCount : undefined,
-      badgeColor: 'var(--color-amber)',
-    },
-    {
-      id: 'policies' as NavTab,
-      label: 'Policy Engine',
-      icon: <ShieldCheck size={18} />,
-    },
-    {
-      id: 'audit' as NavTab,
-      label: 'Audit Explorer',
-      icon: <History size={18} />,
-    },
+    { section: 'workflows', id: 'overview' as const, label: 'Workflows', icon: Layers },
+    ...(autonomyEnabled ? [{ section: 'autonomy', id: 'autonomy' as const, label: 'Agent', icon: Repeat }] : []),
+    { section: 'portfolio', id: 'portfolio' as const, label: 'Wallet', icon: Wallet },
+    { section: 'review', id: 'approvals' as const, label: 'Review', icon: Inbox, badge: attention },
   ];
 
-  return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">
-        <div>
-          <strong>KiteShield</strong>
-        </div>
-      </div>
-      <nav className="sidebar-nav" aria-label="Primary navigation">
-        {tabs.map((tab) => {
-          const isActive = currentTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`sidebar-link${isActive ? ' active' : ''}`}
-              aria-current={isActive ? 'page' : undefined}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-              {tab.badge !== undefined && (
-                <span
-                  className="sidebar-badge"
-                >
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
-    </aside>
-  );
-};
+  return <aside className="sidebar">
+    <div className="sidebar-brand"><strong>KiteShield</strong></div>
+    <nav className="sidebar-nav" aria-label="Primary navigation">
+      {tabs.map(({ section: key, id, label, icon: Icon, badge }) => (
+        <button key={key} onClick={() => onTabChange(id)}
+          className={`sidebar-link${section === key ? ' active' : ''}`}
+          aria-current={section === key ? 'page' : undefined}>
+          <Icon size={18} aria-hidden="true" />
+          <span>{label}</span>
+          {!!badge && <span className="sidebar-badge" aria-label={`${badge} items need review`}>{badge}</span>}
+        </button>
+      ))}
+    </nav>
+  </aside>;
+}
+
+export function WorkspaceNavigation({ currentTab, onTabChange }: Pick<NavigationProps, 'currentTab' | 'onTabChange'>) {
+  const section = workspaceSection(currentTab);
+  const tabs = section === 'review' ? reviewTabs : section === 'workflows' ? workflowTabs : null;
+  if (!tabs) return null;
+
+  return <nav className="workspace-subnav" aria-label={section === 'review' ? 'Review tools' : 'Workflows'}>
+    {tabs.map(tab => <button key={tab.id} className="btn btn-outline"
+      aria-current={currentTab === tab.id ? 'page' : undefined}
+      onClick={() => onTabChange(tab.id)}>{tab.label}</button>)}
+  </nav>;
+}

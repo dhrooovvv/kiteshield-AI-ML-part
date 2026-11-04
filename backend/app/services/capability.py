@@ -116,6 +116,12 @@ class CapabilityService:
             ApprovalRequiredError: If requires_approval but no approval_id
             AuthorizationError: If preconditions are not met
         """
+        from app.models import VaultOperation
+
+        if await session.scalar(
+            select(VaultOperation.id).where(VaultOperation.proposal_id == action.proposal_id)
+        ):
+            raise TokenInvalidError("Vault calls require the vault capability namespace")
         await lock_execution(session)
         await emergency_stop_service.require_running(session)
 
@@ -183,6 +189,104 @@ class CapabilityService:
         )
 
         return token, claims
+
+    async def issue_vault_token(self, session, op, blockchain):
+        """Exact typed call, separate audience and one-use record."""
+        from app.models import VaultCapability
+        from app.services.vault import digest, validate_operation
+
+        await lock_execution(session)
+        if op.status != "PREPARED":
+            raise TokenInvalidError("Reserved vault operation required")
+        await validate_operation(session, op, blockchain, envelope=True)
+        settings = get_settings()
+        now = int(datetime.now(UTC).timestamp())
+        claims = dict(
+            iss=_ISSUER,
+            aud="kiteshield-vault-signer",
+            sub=op.authorized_by,
+            jti=str(uuid.uuid4()),
+            iat=now,
+            exp=now + settings.capability_token_ttl_seconds,
+            operation_id=op.id,
+            payload_digest=op.authority_digest,
+            envelope_digest=digest(op.envelope),
+            sender=op.sender,
+            policy_version=op.policy_version,
+            approval_id=op.approval_id,
+            kind=op.kind,
+            chain_id=11155111,
+            execution_mode=op.execution_mode,
+        )
+        if op.approval_id:
+            from app.models import ApprovalRequest
+
+            approval = await session.get(ApprovalRequest, op.approval_id)
+            if not approval:
+                raise ApprovalRequiredError("Vault approval is unavailable")
+            claims["exp"] = min(
+                claims["exp"], int(datetime.fromisoformat(approval.expires_at).timestamp())
+            )
+        session.add(
+            VaultCapability(
+                jti=claims["jti"],
+                operation_id=op.id,
+                digest=digest(op.envelope),
+                consumed=False,
+                expires_at=datetime.fromtimestamp(claims["exp"], UTC).isoformat(),
+            )
+        )
+        await session.flush()
+        return jwt.encode(claims, settings.capability_token_secret, algorithm="HS256"), claims
+
+    def verify_vault_token(self, token):
+        try:
+            claims = jwt.decode(
+                token,
+                get_settings().capability_token_secret,
+                algorithms=["HS256"],
+                issuer=_ISSUER,
+                audience="kiteshield-vault-signer",
+                leeway=0,
+                options={
+                    "require": [
+                        "iss",
+                        "aud",
+                        "sub",
+                        "jti",
+                        "iat",
+                        "exp",
+                        "operation_id",
+                        "payload_digest",
+                        "envelope_digest",
+                        "sender",
+                        "kind",
+                        "chain_id",
+                        "execution_mode",
+                        "policy_version",
+                    ]
+                },
+            )
+        except jwt.InvalidTokenError as exc:
+            raise TokenInvalidError("Invalid or expired vault capability") from exc
+        if (
+            claims["chain_id"] != 11155111
+            or claims["execution_mode"] != "sepolia"
+            or type(claims["policy_version"]) is not int
+            or any(
+                not isinstance(claims[key], str) or not claims[key]
+                for key in (
+                    "operation_id",
+                    "payload_digest",
+                    "envelope_digest",
+                    "sender",
+                    "kind",
+                    "jti",
+                )
+            )
+        ):
+            raise TokenInvalidError("Malformed vault capability")
+        return claims
 
     def verify_token(self, token: str) -> dict[str, Any]:
         """Verify a capability token's signature and basic claims.

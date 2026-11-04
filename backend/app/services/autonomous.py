@@ -52,6 +52,7 @@ async def maybe_execute(session, proposal, verified_rpc, capability, signer, blo
         return proposal
     # Serialize outstanding autonomous/manual executions before allocating another nonce.
     pending = await session.scalar(select(ExecutionAttempt.id).where(
+        ExecutionAttempt.execution_mode == settings.execution_mode,
         ExecutionAttempt.status.in_(("PREPARED", "SIGNED", "UNCERTAIN", "SUBMITTED"))
     ).limit(1))
     if pending:

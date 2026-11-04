@@ -253,6 +253,8 @@ class ProposalResponse(BaseModel):
     auto_execution_enabled: bool = False
     auto_execution_max_wei: str = "100000000000000"
     provenance: str = "AGENT_OR_STRUCTURED"
+    payment_backend: str = "NATIVE"
+    vault_operation_id: str | None = None
     mandate_version: int | None = None
 
     id: str

@@ -23,7 +23,14 @@ async def health_check(request: Request) -> dict:
     return {
         "status": "healthy",
         "service": "kiteshield-wallet",
+        "local_model": get_settings().invoice_model,
+        "local_voice_enabled": get_settings().local_voice_enabled,
         "version": "0.1.0",
+        "autonomy_demo": (get_settings().autonomy_enabled
+                          and get_settings().execution_mode == "simulated"),
+        "autonomy_profile": ("existing" if getattr(request.app.state, "main_wallet_autonomy", False)
+                             else "sepolia" if getattr(request.app.state, "sepolia_profile", None)
+                             else "simulation" if get_settings().autonomy_enabled else None),
         "execution_mode": get_settings().execution_mode,
         "auto_execute_enabled": get_settings().auto_execute_enabled,
         "auto_execute_max_eth": str(get_settings().auto_execute_max_eth),

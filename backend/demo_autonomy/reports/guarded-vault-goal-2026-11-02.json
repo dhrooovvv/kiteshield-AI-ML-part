@@ -1,0 +1,142 @@
+{
+  "mode": "SEPOLIA",
+  "payment_backend": "VAULT",
+  "request_key": "main_vault_orchestrator_verify_20261102",
+  "goal": "Fund my wallet if needed, then pay 0.00001 ETH to supplier Northstar Services and verify.",
+  "amount_wei": "10000000000000",
+  "requested_at": "2026-11-02T16:58:17.413902+00:00",
+  "intervening_operator_recovery": false,
+  "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+  "task": {
+    "id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+    "request_key": "main_vault_orchestrator_verify_20261102",
+    "goal": "fund if needed, pay supplier Northstar Services 10000000000000 wei, verify",
+    "mandate": "{\"id\": 1, \"version\": 1, \"supplier\": \"Northstar Services\", \"recipient\": \"0x229d5588641f2614e3f486c853d8ba0ec5ffe811\", \"payment_cap\": 50000000000000, \"funding_cap\": 0}",
+    "amount": 10000000000000,
+    "payment_cap": 50000000000000,
+    "funding_cap": "0",
+    "state": "COMPLETED",
+    "reason": null,
+    "plan": "{\"steps\": [\"balance\", \"fund\", \"payment\", \"receipt\"]}",
+    "payment_backend": "VAULT",
+    "steps": [
+      {
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "position": 0,
+        "tool": "balance",
+        "state": "COMPLETED",
+        "owner": "fe61946c-0ed5-4371-9b34-249b140f3090",
+        "lease": null,
+        "result": "{\"tool\": \"balance\", \"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"balance_wei\": \"40000000000000\", \"allowance_wei\": \"40000000000000\", \"agent_gas_balance_wei\": \"1000000000\", \"mandate_version\": 1}"
+      },
+      {
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "position": 1,
+        "tool": "fund",
+        "state": "COMPLETED",
+        "owner": "6ecf81fc-3426-4478-b937-11e20afceaa7",
+        "lease": null,
+        "result": "{\"tool\": \"fund\", \"mode\": \"SEPOLIA\", \"funded_wei\": 0, \"skipped\": true, \"payment_backend\": \"VAULT\", \"balance_wei\": \"40000000000000\", \"mandate_version\": 1}"
+      },
+      {
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "position": 2,
+        "tool": "payment",
+        "state": "COMPLETED",
+        "owner": "f335e48e-5474-455d-812d-cc0bd6d87493",
+        "lease": null,
+        "result": "{\"tool\": \"payment\", \"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"paid_wei\": 10000000000000, \"tx_hash\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"receipt_id\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"verified\": true, \"recipient\": \"0x229D5588641f2614e3F486c853D8BA0eC5FFe811\", \"confirmations_required\": 1, \"block_number\": 12049492, \"fee_paid_wei\": \"3651582\", \"explorer_url\": \"https://sepolia.etherscan.io/tx/0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"proposal_id\": \"0d709701-25e6-42d5-a897-18d7205a2e81\", \"mandate_version\": 1}"
+      },
+      {
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "position": 3,
+        "tool": "receipt",
+        "state": "COMPLETED",
+        "owner": "35be9e7f-410d-43ba-968f-05dfb33f3299",
+        "lease": null,
+        "result": "{\"tool\": \"receipt\", \"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"tx_hash\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"receipt_id\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"verified\": true, \"recipient\": \"0x229D5588641f2614e3F486c853D8BA0eC5FFe811\", \"confirmations_required\": 1, \"block_number\": 12049492, \"fee_paid_wei\": \"3651582\", \"explorer_url\": \"https://sepolia.etherscan.io/tx/0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"mandate_version\": 1}"
+      }
+    ],
+    "events": [
+      {
+        "id": 25,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "GOAL_ACCEPTED",
+        "detail": "SEPOLIA; administrator mandate bound"
+      },
+      {
+        "id": 26,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "PLAN_VALIDATED",
+        "detail": "Fixed tools, order and mandate verified"
+      },
+      {
+        "id": 27,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_STARTED",
+        "detail": "balance"
+      },
+      {
+        "id": 28,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_COMPLETED",
+        "detail": "{\"tool\": \"balance\", \"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"balance_wei\": \"40000000000000\", \"allowance_wei\": \"40000000000000\", \"agent_gas_balance_wei\": \"1000000000\", \"mandate_version\": 1}"
+      },
+      {
+        "id": 29,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_STARTED",
+        "detail": "fund"
+      },
+      {
+        "id": 30,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_COMPLETED",
+        "detail": "{\"tool\": \"fund\", \"mode\": \"SEPOLIA\", \"funded_wei\": 0, \"skipped\": true, \"payment_backend\": \"VAULT\", \"balance_wei\": \"40000000000000\", \"mandate_version\": 1}"
+      },
+      {
+        "id": 31,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_STARTED",
+        "detail": "payment"
+      },
+      {
+        "id": 32,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "TRANSACTION_OBSERVED",
+        "detail": "{\"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"tx_hash\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\"}"
+      },
+      {
+        "id": 33,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "WAITING_RECEIPT",
+        "detail": "PAYMENT_RECEIPT_PENDING"
+      },
+      {
+        "id": 34,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_COMPLETED",
+        "detail": "{\"tool\": \"payment\", \"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"paid_wei\": 10000000000000, \"tx_hash\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"receipt_id\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"verified\": true, \"recipient\": \"0x229D5588641f2614e3F486c853D8BA0eC5FFe811\", \"confirmations_required\": 1, \"block_number\": 12049492, \"fee_paid_wei\": \"3651582\", \"explorer_url\": \"https://sepolia.etherscan.io/tx/0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"proposal_id\": \"0d709701-25e6-42d5-a897-18d7205a2e81\", \"mandate_version\": 1}"
+      },
+      {
+        "id": 35,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_STARTED",
+        "detail": "receipt"
+      },
+      {
+        "id": 36,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "STEP_COMPLETED",
+        "detail": "{\"tool\": \"receipt\", \"mode\": \"SEPOLIA\", \"payment_backend\": \"VAULT\", \"tx_hash\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"receipt_id\": \"0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"verified\": true, \"recipient\": \"0x229D5588641f2614e3F486c853D8BA0eC5FFe811\", \"confirmations_required\": 1, \"block_number\": 12049492, \"fee_paid_wei\": \"3651582\", \"explorer_url\": \"https://sepolia.etherscan.io/tx/0x259db654bee92c4c5294710517ce400244dfc163ef0cece23def674d635f1bac\", \"mandate_version\": 1}"
+      },
+      {
+        "id": 37,
+        "task_id": "4123c4e3-4761-45d6-9527-0717921a8a6b",
+        "kind": "TASK_COMPLETED",
+        "detail": "SEPOLIA"
+      }
+    ]
+  },
+  "state": "COMPLETED"
+}
