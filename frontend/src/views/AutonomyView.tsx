@@ -1,3 +1,4 @@
+import { ArrowUpRight, Check, ChevronRight, Circle, Clock3, Play, ShieldCheck, Wallet } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { api } from '../api/client.ts';
 import { weiToEth } from '../amounts.ts';
@@ -10,6 +11,8 @@ export function AutonomyView() {
   const [snapshot, setSnapshot] = useState<AutonomySnapshot | null>(null);
   const [goal, setGoal] = useState('Fund my wallet if needed, then pay 10 wei to supplier Acme and verify.');
   const [notice, setNotice] = useState('');
+  const [showBoundary, setShowBoundary] = useState(false);
+  const [walletRevision, setWalletRevision] = useState(0);
   const [refreshError, setRefreshError] = useState('');
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -67,97 +70,172 @@ export function AutonomyView() {
     void load();
     const timer = setInterval(() => void load(), 15000);
     return () => { active = false; clearInterval(timer); };
-  }, [isSepolia, roles]);
+  }, [isSepolia, roles, walletRevision]);
   async function act(work: () => Promise<unknown>, message: string) {
     setBusy(true);
-    try { await work(); setNotice(message); await refresh(); }
+    try { await work(); setNotice(message); setWalletRevision(value => value + 1); await refresh(); }
     catch (error) { setNotice(error instanceof Error ? error.message : 'The action failed.'); }
     finally { setBusy(false); }
   }
-  return <section className="autonomy-main">
-    <div className="autonomy-heading"><div><h2>One goal. Every step accounted for.</h2>
-      <p>Local Gemma proposes the plan. Deterministic rules control authority.</p></div>
-      <span className="autonomy-label">{isSepolia ? 'Sepolia · on-chain' : snapshot ? 'Isolated simulation' : 'Checking connection'}</span></div>
-    <p className="autonomy-boundary">{snapshot?.control.quarantined ? 'Self-quarantined. An administrator must resume execution.' : isSepolia ? `${isMainWallet ? 'Uses your existing wallet and policy.' : 'Uses a separate test wallet.'} Administrator limits and human approvals still apply. A mined receipt confirms each payment.` : 'Works within administrator permissions. No funded wallet access or on-chain broadcasts.'}</p>
-    {isSepolia && <div className="autonomy-task">
-      <strong>{isMainWallet ? 'Existing Sepolia wallet' : 'Separate Sepolia wallet'}</strong>
-      {wallet && <><p style={{overflowWrap: 'anywhere'}}>{wallet.address}</p>
-        <p>{weiToEth(wallet.balance_wei)} ETH · {walletError ? 'last known balance' : 'on-chain balance'}</p>
-        <p>{wallet.payments_enabled ? `Payment fee ceiling: ${weiToEth(wallet.max_payment_fee_wei)} ETH. Each task reserves a smaller fee after checking the network.` : 'Payments disabled. Configure a recipient and payment and fee budgets in the separate administrator profile, then restart.'}</p>
-        <p>{wallet.faucet_enabled ? 'Configured faucet enabled.' : 'Automatic faucet disabled; provider credentials and a funding budget are required.'}</p></>}
-      {wallet?.vault?.enabled && <div className="autonomy-vault">
-        <strong>Guarded vault · {wallet.new_task_backend === 'VAULT' ? 'used for new tasks' : 'available'}</strong>
-        {wallet.vault.address ? <>
-          <p style={{overflowWrap: 'anywhere'}}>Vault: <a href={`https://sepolia.etherscan.io/address/${wallet.vault.address}`} target="_blank" rel="noopener noreferrer">{wallet.vault.address}</a></p>
-          <p style={{overflowWrap: 'anywhere'}}>Restricted agent: {wallet.vault.agent}</p>
-          <p>Your existing wallet owns the vault. Only an administrator can increase its allowance or resume an on-chain pause.</p>
-          {wallet.vault.chain && <>
-            <p>{weiToEth(wallet.vault.chain.remaining)} ETH allowance · {weiToEth(wallet.vault.chain.balance)} ETH in escrow.</p>
-            <p>{wallet.vault.chain.paused ? 'Paused on-chain' : wallet.vault.chain.expires * 1000 <= now ? 'Session expired' : 'Session active'} · expires {new Date(wallet.vault.chain.expires * 1000).toLocaleString()} · epoch {wallet.vault.epoch}.</p>
-            <button className="btn btn-outline" disabled={busy || !roles.includes('proposer') || wallet.vault.chain.paused || BigInt(wallet.vault.chain.agent_balance) === 0n}
-              onClick={() => void act(() => controlVault('PAUSE'), 'On-chain pause submitted. The receipt will confirm its result.')}>Pause vault</button>
-            {!wallet.vault.chain.paused && <button className="btn btn-outline" disabled={busy || !roles.includes('policyAdmin')}
-              onClick={() => void act(() => controlVault('OWNER_PAUSE'), 'Administrator pause submitted from the owner wallet. It does not depend on the agent gas balance.')}>Pause vault as administrator</button>}
-            {wallet.vault.chain.paused && <button className="btn btn-outline" disabled={busy || !roles.includes('policyAdmin')}
-              onClick={() => void act(() => controlVault('RESUME'), 'Administrator resume submitted. It does not extend the allowance or expiry.')}>Resume vault as administrator</button>}
-          </>}
-          {wallet.vault.chain && wallet.vault.chain.expires * 1000 <= now && <button className="btn btn-outline"
-            disabled={busy || !roles.includes('policyAdmin')}
-            onClick={() => void act(() => controlVault('CONFIGURE'), 'Administrator session grant submitted within the server limits. Earlier pending tasks retain their old grant and require review.')}>
-            Renew session as administrator</button>}
-          {wallet.vault.operations?.slice(0, 3).map(op => <p key={op.id}>{readableReason(op.kind)} · {readableReason(op.status)} {op.tx_hash && <a href={`https://sepolia.etherscan.io/tx/${op.tx_hash}`} target="_blank" rel="noopener noreferrer">View transaction</a>}</p>)}
-        </> : <p>Deployment and the initial allowance require administrator setup.</p>}
-      </div>}
-      {wallet?.incoming_watch?.enabled && <p>Incoming token/NFT monitor: {wallet.incoming_watch.suspended_epoch != null ? 'paused for administrator review' : wallet.incoming_watch.block == null ? 'starting' : `confirmed block ${wallet.incoming_watch.block}`}. Incoming events cannot grant permission.</p>}
-      {walletError && <p role="status">{walletError}</p>}
-    </div>}
-    {!roles.includes('proposer') && <p role="status">Connect the Proposer role using API key to start tasks and view progress. Existing human-approver and policy-administrator roles handle exceptions.</p>}
-    <form className="autonomy-goal" onSubmit={event => {event.preventDefault(); void act(
-      async () => {
-        pendingGoal.current = goalSubmission(pendingGoal.current, goal);
-        const result = await autonomyRequest('/goals', 'proposer', {goal, request_key: pendingGoal.current.key});
-        pendingGoal.current = null;
-        return result;
-      }, 'Task started. Permitted steps will complete automatically.');}}>
-      <label htmlFor="autonomous-goal">What should the wallet do?</label>
-      <div><input id="autonomous-goal" value={goal} onChange={e => {editedGoal.current = true; setGoal(e.target.value);}} maxLength={500} required />
-        <button className="btn btn-primary" disabled={busy || !roles.includes('proposer') || !!snapshot?.control.quarantined || (isSepolia && (!wallet?.payments_enabled || !!walletError || (wallet?.new_task_backend === 'VAULT' && !vaultReady(wallet.vault, now))))}>Start task</button></div>
-    </form>
-    <p role="status" aria-live="polite">{refreshError || notice}</p>
-    <div className="autonomy-columns"><div><h3>Task timeline</h3>
-      {!snapshot?.tasks.length && <p>{snapshot?.mandate ? 'No recorded tasks. Your standing mandate is ready; start a goal.' : snapshot ? 'No recorded tasks. Set a standing mandate, then give the wallet a goal.' : 'Task history is not loaded. Connect the Proposer role to view it.'}</p>}
-      {snapshot?.tasks.map(task => <article className="autonomy-task" key={task.id}>
-        <div className="autonomy-task-heading"><strong>Pay supplier · {weiToEth(String(task.amount))} ETH{task.payment_backend === 'VAULT' ? ' · guarded vault' : ''}</strong><span>{readableReason(task.state)}</span></div>
-        <ol className="autonomy-steps">{['Balance', 'Funding', 'Payment', 'Verification'].map((name, index) =>
-          <li key={name} data-state={autonomyStepState(task.state, task.steps[index]?.state)}>{name}<small>{readableReason(autonomyStepState(task.state, task.steps[index]?.state))}</small></li>)}</ol>
-        {task.reason && <p>{readableReason(task.reason)}</p>}
-        {isSepolia && task.state === 'HUMAN_REQUIRED' && <button className="btn btn-outline" disabled={busy || !roles.includes('proposer')}
-          onClick={() => void act(() => autonomyRequest(`/goals/${task.id}/reconcile`, 'proposer', {}), 'Existing receipt checked without signing or broadcasting.')}>
-          Reconcile existing payment</button>}
-        {isMainWallet && task.state === 'HUMAN_REQUIRED' && ['RECONCILIATION_UNAVAILABLE', 'PREFLIGHT_UNAVAILABLE', 'PREFLIGHT_LIMIT_BLOCK'].includes(task.reason || '') && <button className="btn btn-outline" disabled={busy || !roles.includes('policyAdmin')}
-          onClick={() => void act(() => autonomyRequest(`/goals/${task.id}/resume-before-signing`, 'policyAdmin', {}), 'Administrator requested recovery of the same proposal. Signed outcomes cannot be retried here.')}>
-          Retry before signing as administrator</button>}
-        {transactionLinks(task).map(link => <p key={link.hash} style={{overflowWrap: 'anywhere'}}><a href={link.url} target="_blank" rel="noopener noreferrer">View Sepolia transaction · {link.hash}</a></p>)}
-        <p className="autonomy-budget">Task payment ceiling {weiToEth(String(task.payment_cap))} ETH · funding ceiling {weiToEth(String(task.funding_cap))} ETH</p>
-        {task.state === 'WAITING_APPROVAL' && <div className="autonomy-actions">
-          {(['APPROVE', 'REJECT'] as const).map(decision => <button className="btn btn-outline" key={decision}
-            disabled={busy || !roles.includes('approver')}
-            onClick={() => void act(() => autonomyRequest(`/approvals/${task.id}/decision`, 'approver', {decision}), 'Human decision recorded.')}>
-            {decision === 'APPROVE' ? 'Approve as human' : 'Reject as human'}</button>)}</div>}
-        <details><summary>{task.events.length} persisted events</summary>
-          {task.events.map(event => <p className="autonomy-event" key={event.id}>{readableReason(event.kind)}: {event.detail}</p>)}
-        </details></article>)}
-    </div><aside><h3>Exceptions inbox</h3>
-      {!snapshot?.issues.some(issue => !issue.resolved) && <p>No open exceptions loaded.</p>}
-      {snapshot?.issues.filter(issue => !issue.resolved).map(issue => <div className="autonomy-issue" key={issue.id}><strong>{readableReason(issue.reason)}</strong>
-        <p>{issue.task_id ? `Task ${issue.task_id.slice(0, 8)}` : 'Untrusted event or instruction'}</p></div>)}
-      {!!snapshot?.system_events?.length && <details><summary>Incoming events & system activity</summary>
-        {snapshot.system_events.map(event => <p className="autonomy-event" key={event.id}>{readableReason(event.kind)}: {event.detail}</p>)}
-      </details>}
-      {!!snapshot?.control.quarantined && <button className="btn btn-outline" disabled={busy || !roles.includes('policyAdmin')}
-        onClick={() => void act(() => autonomyRequest('/quarantine/resume', 'policyAdmin', {}), 'Administrator resumed execution.')}>
-        Resume as administrator</button>}
-      <details className="autonomy-mandate"><summary>Standing mandate</summary>
+  const connected = roles.includes('proposer');
+  const vault = wallet?.vault?.enabled ? wallet.vault : undefined;
+  const chain = vault?.chain;
+  const expired = !!chain && chain.expires * 1000 <= now;
+  const issues = snapshot?.issues.filter(issue => !issue.resolved) ?? [];
+  const admin = roles.includes('policyAdmin');
+  const quarantined = !!snapshot?.control.quarantined;
+  const blocked = quarantined ? 'An administrator needs to review the automation pause.'
+    : walletError ? 'Wallet balance unavailable. Retrying…'
+    : isSepolia && wallet && !wallet.payments_enabled ? 'Payments need administrator setup.'
+    : isSepolia && wallet?.new_task_backend === 'VAULT' && !vaultReady(vault, now)
+      ? expired ? 'An administrator can renew the vault session.'
+        : chain?.paused ? 'The vault session is paused.' : 'The vault needs an active, funded session.'
+      : '';
+  const mandate = snapshot?.mandate;
+  const startDisabled = busy || !connected || !mandate || !!blocked || (isSepolia && !wallet);
+  const receipt = isSepolia && snapshot?.tasks
+    .filter(task => task.state === 'COMPLETED' && task.payment_backend === 'VAULT')
+    .flatMap(task => transactionLinks({ ...task, events: [], steps: task.steps.filter(step => step.tool === 'payment' || step.tool === 'receipt') }))[0];
+  const short = (value: string) => `${value.slice(0, 8)}…${value.slice(-6)}`;
+  return <section className="autonomy-main" aria-label="Autonomous tasks workspace">
+    {!connected ? <div className="autonomy-card autonomy-empty">
+      <Wallet size={20} aria-hidden="true" /><div><h2>Connect to Autonomous Tasks</h2>
+      <p>Use <strong>API key</strong> to connect your Proposer role.</p></div>
+    </div> : <>
+      {isSepolia && <section className="autonomy-card autonomy-overview" aria-label="Wallet and vault">
+        <div className="autonomy-overview-grid">
+          <div className="autonomy-account">
+            <div className="autonomy-card-heading"><h2><Wallet size={17} aria-hidden="true" /> Wallet</h2><span className="autonomy-badge">{wallet && walletError ? 'Last known balance' : 'Sepolia'}</span></div>
+            {wallet ? <>
+              <div className="autonomy-value" title={weiToEth(wallet.balance_wei) + ' ETH'}>{weiToEth(wallet.balance_wei)} <span>ETH</span></div>
+              <a className="autonomy-address" href={`https://sepolia.etherscan.io/address/${wallet.address}`} title={wallet.address} target="_blank" rel="noopener noreferrer">{short(wallet.address)} <ArrowUpRight size={13} aria-hidden="true" /></a>
+            </> : <p className="autonomy-muted">{walletError ? 'Balance unavailable' : 'Reading balance…'}</p>}
+          </div>
+          {vault && <div className="autonomy-account">
+            <div className="autonomy-card-heading"><h2><ShieldCheck size={17} aria-hidden="true" /> Guarded vault</h2>
+              {chain && <span className="autonomy-badge" data-tone={chain.paused || expired ? 'attention' : 'positive'}>{chain.paused ? 'Paused' : expired ? 'Renewal due' : 'Session active'}</span>}
+            </div>
+            {chain ? <div className="autonomy-vault-values">
+              <div><span>Allowance</span><strong>{weiToEth(chain.remaining)} <small>ETH</small></strong></div>
+              <div><span>Escrow</span><strong>{weiToEth(chain.balance)} <small>ETH</small></strong></div>
+            </div> : <p className="autonomy-muted">{vault.address ? 'Reading session…' : 'Awaiting setup'}</p>}
+          </div>}
+        </div>
+        {wallet && <details className="autonomy-disclosure">
+          <summary><ChevronRight size={15} aria-hidden="true" /> Wallet & session details</summary>
+          <div className="autonomy-detail-body">
+            <dl className="autonomy-facts">
+              <div><dt>Wallet</dt><dd className="font-mono">{wallet.address}</dd></div>
+              {vault?.address && <div><dt>Vault</dt><dd><a href={`https://sepolia.etherscan.io/address/${vault.address}`} target="_blank" rel="noopener noreferrer">{vault.address}</a></dd></div>}
+              {vault?.agent && <div><dt>Restricted agent</dt><dd className="font-mono">{vault.agent}</dd></div>}
+              {chain && <div><dt>Session expiry</dt><dd>{new Date(chain.expires * 1000).toLocaleString()} · Epoch {vault?.epoch}</dd></div>}
+              <div><dt>Payment fee ceiling</dt><dd>{weiToEth(wallet.max_payment_fee_wei)} ETH</dd></div>
+              <div><dt>Automatic funding</dt><dd>{wallet.faucet_enabled ? 'Configured' : 'Setup required'}</dd></div>
+              {wallet.incoming_watch?.enabled && <div><dt>Incoming monitor</dt><dd>{wallet.incoming_watch.suspended_epoch != null ? 'Paused for review' : wallet.incoming_watch.block == null ? 'Starting' : `Block ${wallet.incoming_watch.block}`}</dd></div>}
+            </dl>
+            {chain && <div className="autonomy-actions">
+              {!chain.paused && connected && <button className="btn btn-outline" disabled={busy || BigInt(chain.agent_balance) === 0n}
+                onClick={() => void act(() => controlVault('PAUSE'), 'Vault pause submitted.')}>Pause vault</button>}
+              {!chain.paused && admin && <button className="btn btn-outline" disabled={busy}
+                onClick={() => void act(() => controlVault('OWNER_PAUSE'), 'Owner pause submitted.')}>Pause as administrator</button>}
+              {chain.paused && <button className="btn btn-outline" disabled={busy || !admin}
+                onClick={() => void act(() => controlVault('RESUME'), 'Vault resume submitted.')}>Resume as administrator</button>}
+              {expired && <button className="btn btn-outline" disabled={busy || !admin}
+                onClick={() => void act(() => controlVault('CONFIGURE'), 'Session renewal submitted.')}>Renew session</button>}
+            </div>}
+            {!!vault?.operations?.length && <ul className="autonomy-operations">{vault.operations.slice(0, 3).map(op =>
+              <li key={op.id}><span>{readableReason(op.kind)} · {readableReason(op.status)}</span>
+                {op.tx_hash && <a href={`https://sepolia.etherscan.io/tx/${op.tx_hash}`} target="_blank" rel="noopener noreferrer">Transaction <ArrowUpRight size={13} aria-hidden="true" /></a>}</li>)}</ul>}
+          </div>
+        </details>}
+      </section>}
+      <form className="autonomy-card autonomy-goal" onSubmit={event => {event.preventDefault(); if (startDisabled) return; void act(
+        async () => {
+          pendingGoal.current = goalSubmission(pendingGoal.current, goal);
+          const result = await autonomyRequest('/goals', 'proposer', {goal, request_key: pendingGoal.current.key});
+          pendingGoal.current = null;
+          return result;
+        }, 'Task started.');}}>
+        <div className="autonomy-card-heading"><label htmlFor="autonomous-goal">New task</label>
+          {snapshot && <span className="autonomy-badge">{isSepolia ? 'Local Gemma' : 'Simulation'}</span>}</div>
+        <div className="autonomy-compose"><textarea id="autonomous-goal" rows={2} value={goal} onChange={e => {editedGoal.current = true; setGoal(e.target.value);}} maxLength={500} required />
+          <button className="btn btn-primary" disabled={startDisabled}><Play size={15} aria-hidden="true" /> Start task</button></div>
+        {mandate && <div className="autonomy-actions autonomy-demo-actions">
+          <button type="button" className="btn btn-outline" disabled={busy} onClick={() => {
+            editedGoal.current = true;
+            const amount = Math.min(mandate.payment_cap, isMainWallet ? 10_000_000_000_000 : 10);
+            setGoal(`Fund my wallet if needed, then pay ${amount} wei to supplier ${mandate.supplier} and verify.`);
+            setShowBoundary(false);
+          }}>Use payment example</button>
+          <button type="button" className="btn btn-outline" aria-expanded={showBoundary}
+            aria-controls="autonomy-boundary-example" onClick={() => setShowBoundary(value => !value)}>Show spending boundary</button>
+          {receipt && <a className="autonomy-address" href={receipt.url} target="_blank" rel="noopener noreferrer">
+            Last verified vault payment <ArrowUpRight size={13} aria-hidden="true" />
+          </a>}
+        </div>}
+        <div id="autonomy-boundary-example" hidden={!showBoundary || !mandate}>
+          {mandate && <p className="autonomy-muted">
+            <strong>Would be blocked.</strong> A request for {weiToEth(String(mandate.payment_cap + 1))} ETH
+            exceeds the standing mandate limit of {weiToEth(String(mandate.payment_cap))} ETH.
+            This preview reads the saved mandate.
+          </p>}
+        </div>
+        {blocked && <div className="autonomy-notice"><span>{blocked}</span>
+          {quarantined && <a href="#autonomy-controls">Review controls</a>}
+          {expired && admin && <button className="btn btn-outline" type="button" disabled={busy}
+            onClick={() => void act(() => controlVault('CONFIGURE'), 'Session renewal submitted.')}>Renew session</button>}
+        </div>}
+        {snapshot && !mandate && <p className="autonomy-muted">Set a standing mandate in Controls to start a task.</p>}
+        {(refreshError || notice) && <p className="autonomy-muted" role="status">{refreshError || notice}</p>}
+      </form>
+      <div className="autonomy-columns">
+        <section className="autonomy-card autonomy-ledger" aria-labelledby="autonomy-timeline">
+          <div className="autonomy-card-heading autonomy-section-head"><h2 id="autonomy-timeline">Task timeline</h2>
+            {snapshot && <span className="autonomy-muted">{snapshot.tasks.length} {snapshot.tasks.length === 1 ? 'task' : 'tasks'}</span>}</div>
+          {!snapshot?.tasks.length && <p className="autonomy-empty-text">{snapshot ? 'No tasks yet.' : 'Loading tasks…'}</p>}
+          {snapshot?.tasks.map(task => <article className="autonomy-task" key={task.id}>
+            <div className="autonomy-card-heading"><div><h3>{weiToEth(String(task.amount))} ETH</h3><span className="autonomy-muted">{task.payment_backend === 'VAULT' ? 'Guarded vault payment' : 'Supplier payment'}</span></div>
+              <span className="autonomy-badge" data-tone={task.state === 'COMPLETED' ? 'positive' : task.reason ? 'attention' : undefined}>{readableReason(task.state)}</span></div>
+            <ol className="autonomy-steps">{['Balance', 'Funding', 'Payment', 'Verification'].map((name, index) => {
+              const step = task.steps[index];
+              const state = autonomyStepState(task.state, step?.state);
+              let skipped = false;
+              if (index === 1 && state === 'COMPLETED' && step?.result) {
+                try { skipped = JSON.parse(step.result)?.skipped === true; } catch { /* Keep the recorded status. */ }
+              }
+              const Icon = state === 'COMPLETED' ? Check : ['RUNNING', 'WAITING'].includes(state) ? Clock3 : Circle;
+              return <li key={name} data-state={state}><Icon size={14} aria-hidden="true" /><div>{name}<small>{skipped ? 'Not needed' : readableReason(state)}</small></div></li>;
+            })}</ol>
+            {task.reason && <p className="autonomy-muted">{readableReason(task.reason)}</p>}
+            {(task.state === 'HUMAN_REQUIRED' || task.state === 'WAITING_APPROVAL') && <div className="autonomy-actions">
+              {isSepolia && task.state === 'HUMAN_REQUIRED' && <button className="btn btn-outline" disabled={busy || !connected}
+                onClick={() => void act(() => autonomyRequest(`/goals/${task.id}/reconcile`, 'proposer', {}), 'Existing receipt checked.')}>Check receipt</button>}
+              {isMainWallet && task.state === 'HUMAN_REQUIRED' && ['RECONCILIATION_UNAVAILABLE', 'PREFLIGHT_UNAVAILABLE', 'PREFLIGHT_LIMIT_BLOCK'].includes(task.reason || '') &&
+                <button className="btn btn-outline" disabled={busy || !admin}
+                  onClick={() => void act(() => autonomyRequest(`/goals/${task.id}/resume-before-signing`, 'policyAdmin', {}), 'Recovery requested for the same proposal.')}>Retry before signing</button>}
+              {task.state === 'WAITING_APPROVAL' && (['APPROVE', 'REJECT'] as const).map(decision => <button className="btn btn-outline" key={decision}
+                disabled={busy || !roles.includes('approver')}
+                onClick={() => void act(() => autonomyRequest(`/approvals/${task.id}/decision`, 'approver', {decision}), 'Decision recorded.')}>{decision === 'APPROVE' ? 'Approve' : 'Reject'}</button>)}
+            </div>}
+            <div className="autonomy-task-links">{transactionLinks(task).map(link =>
+              <a key={link.hash} href={link.url} title={link.hash} target="_blank" rel="noopener noreferrer">Transaction <span className="font-mono">{short(link.hash)}</span><ArrowUpRight size={13} aria-hidden="true" /></a>)}</div>
+            <details className="autonomy-disclosure"><summary><ChevronRight size={15} aria-hidden="true" /> Task details <span>{task.events.length} events</span></summary>
+              <div className="autonomy-detail-body"><p className="autonomy-muted">Payment limit {weiToEth(String(task.payment_cap))} ETH · Funding limit {weiToEth(String(task.funding_cap))} ETH</p>
+                {task.events.map(event => <p className="autonomy-event" key={event.id}><strong>{readableReason(event.kind)}</strong> · {event.detail}</p>)}</div>
+            </details>
+          </article>)}
+        </section>
+        <aside className="autonomy-card autonomy-controls" id="autonomy-controls" aria-labelledby="autonomy-controls-title">
+          <div className="autonomy-card-heading autonomy-section-head"><h2 id="autonomy-controls-title">Controls</h2></div>
+          {quarantined && <div className="autonomy-inbox"><strong>Automation paused</strong><button className="btn btn-outline" disabled={busy || !admin}
+            onClick={() => void act(() => autonomyRequest('/quarantine/resume', 'policyAdmin', {}), 'Automation resumed.')}>Resume as administrator</button></div>}
+          <div className="autonomy-inbox"><strong>Exceptions</strong><span className="autonomy-muted">{snapshot ? issues.length ? `${issues.length} open` : 'All clear' : 'Loading…'}</span></div>
+          {issues.map(issue => <div className="autonomy-issue" key={issue.id}><strong>{readableReason(issue.reason)}</strong>
+            {issue.task_id && <span className="autonomy-muted">Task {issue.task_id.slice(0, 8)}</span>}</div>)}
+          {!!snapshot?.system_events?.length && <details className="autonomy-disclosure"><summary><ChevronRight size={15} aria-hidden="true" /> System activity</summary>
+            <div className="autonomy-detail-body">{snapshot.system_events.map(event => <p className="autonomy-event" key={event.id}>{readableReason(event.kind)} · {event.detail}</p>)}</div>
+          </details>}
+      <details className="autonomy-mandate"><summary><ChevronRight size={15} aria-hidden="true" /> Standing mandate</summary>
         <form key={`${snapshot?.mandate?.version || 0}-${wallet?.approval_threshold_wei || ''}`} onSubmit={event => {event.preventDefault(); const form = new FormData(event.currentTarget);
           void act(() => autonomyRequest('/mandate', 'policyAdmin', {supplier: form.get('supplier'), recipient: form.get('recipient'),
             payment_cap: Number(form.get('payment')), funding_cap: form.get('funding'),
@@ -167,9 +245,11 @@ export function AutonomyView() {
           <label>Session payment budget (wei)<input name="payment" type="number" min="1" max="1000000000000000" defaultValue={snapshot?.mandate?.payment_cap || '1000'} required /></label>
           <label>Funding budget (wei)<input name="funding" inputMode="numeric" pattern="[0-9]+" defaultValue={snapshot?.mandate?.funding_cap || (isSepolia ? '0' : '1000')} required /></label>
           <label>Human approval at (wei)<input name="threshold" inputMode="numeric" pattern="[0-9]+" defaultValue={wallet?.approval_threshold_wei || '50'} readOnly={wallet?.policy_managed} required /></label>
-          <button className="btn btn-outline" disabled={busy || !roles.includes('policyAdmin')}>Save as administrator</button>
-          <p>{isMainWallet ? 'This narrows workflow permissions within your existing policy and saved vendor limits. It does not replace the wallet policy.' : 'Replacing a mandate invalidates earlier pending tasks. The agent cannot raise limits.'}</p>
+          <button className="btn btn-outline" disabled={busy || !roles.includes('policyAdmin')}>Save mandate</button>
+          <p>{isMainWallet ? 'Changes stay within your wallet policy and vendor limits.' : 'Changing the mandate puts earlier tasks on hold.'}</p>
         </form></details>
-    </aside></div>
+        </aside>
+      </div>
+    </>}
   </section>;
 }

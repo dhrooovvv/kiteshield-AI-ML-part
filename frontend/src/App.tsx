@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Header } from './components/Header.tsx';
-import { Navigation, type NavTab } from './components/Navigation.tsx';
+import { Navigation, WorkspaceNavigation, type NavTab } from './components/Navigation.tsx';
 import { OverviewView } from './views/OverviewView.tsx';
 import { ProposalsView } from './views/ProposalsView.tsx';
 import { ApprovalsView } from './views/ApprovalsView.tsx';
@@ -24,7 +24,8 @@ import { autonomyAvailable } from './autonomy.ts';
 export const App: React.FC = () => {
   const [autonomyEnabled, setAutonomyEnabled] = useState(false);
   useEffect(() => { let active = true; void autonomyAvailable().then(value => { if (active) setAutonomyEnabled(value); }); return () => { active = false; }; }, []);
-  const [currentTab, setCurrentTab] = useState<NavTab>('overview');
+  const [selectedTab, setCurrentTab] = useState<NavTab | null>(null);
+  const currentTab = selectedTab ?? (autonomyEnabled ? 'autonomy' : 'overview');
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [fundingOpen, setFundingOpen] = useState(false);
   const [health, setHealth] = useState<BackendHealth | null>(null);
@@ -167,7 +168,6 @@ export const App: React.FC = () => {
         onTabChange={setCurrentTab}
         pendingApprovalsCount={pendingApprovals.length}
         promptReviewsCount={humanAttentionCount - pendingApprovals.length}
-        totalProposalsCount={proposals.length}
       />
       <div className="app-main">
         <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio', treasury: 'Treasury Autopilot', invoices: 'Accounts Payable', autonomy: 'Autonomous Tasks' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} onOpenAssistant={() => setAssistantOpen(true)} />
@@ -199,6 +199,7 @@ export const App: React.FC = () => {
 
       {/* Main Content View Container */}
       <main className="content-shell">
+        <WorkspaceNavigation currentTab={currentTab} onTabChange={setCurrentTab} />
         {currentTab !== 'portfolio' && currentTab !== 'approvals' && currentTab !== 'treasury' && currentTab !== 'invoices' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
         {currentTab === 'overview' && (
           <OverviewView
@@ -250,7 +251,7 @@ export const App: React.FC = () => {
         {currentTab === 'autonomy' && autonomyEnabled && <AutonomyView />}
         {currentTab === 'audit' && <AuditView refreshRevision={refreshRevision} />}
         {currentTab === 'invoices' && <InvoicesView refreshRevision={refreshRevision} />}
-        {currentTab === 'portfolio' && <PortfolioView refreshRevision={portfolioRefreshRevision} onOpenAssistant={() => setAssistantOpen(true)} />}
+        {currentTab === 'portfolio' && <PortfolioView refreshRevision={portfolioRefreshRevision} />}
         {currentTab === 'treasury' && <TreasuryView refreshRevision={portfolioRefreshRevision} onOpenAudit={setSelectedAuditCid} onOpenDetails={setSelectedProposalForDetails} />}
       </main>
 

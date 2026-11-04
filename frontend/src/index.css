@@ -1131,3 +1131,15 @@ code, .font-mono {
 .assistant-invoice-outcome[data-state="CHECKED"] { color:#40594c; background:#e2ebe5; }
 .assistant-check-details { margin-top:14px; color:#476152; font-size:.95rem; }
 .assistant-check-details summary { cursor:pointer; width:fit-content; padding:4px 0; }
+
+.workspace-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.workspace-subnav button[aria-current=page] {
+  background: var(--bg-input) !important;
+  color: var(--color-cyan) !important;
+  border-color: currentColor !important;
+}
