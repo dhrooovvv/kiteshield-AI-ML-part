@@ -56,7 +56,7 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasRequiredRole) { setError('Policy administrator credential required. Connect it using Switch role.'); return; }
+    if (!hasRequiredRole) { setError('Policy administrator credential required. Connect Admin to continue.'); return; }
     setLoading(true);
     setError(null);
 
@@ -143,7 +143,7 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
         <div className="glass-panel policy-panel" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
           <ShieldAlert size={32} color="var(--color-amber)" style={{ marginBottom: '10px' }} />
           <p>No active policy loaded. Connect a role or refresh to check.</p>
-          <p className="required-role-note">{hasRequiredRole ? 'Policy-edit permission verified.' : 'Requires Policy administrator, or Demo administrator in simulation. Connect it using Switch role.'}</p>
+          <p className="required-role-note">{hasRequiredRole ? 'Policy-edit permission verified.' : 'Requires permission to manage policy. Connect Admin to continue.'}</p>
           <button className="btn btn-primary" style={{ marginTop: '14px' }} ref={triggerRef} onClick={openEditor} disabled={!hasRequiredRole}>
             Create Initial Policy
           </button>
@@ -186,7 +186,7 @@ export const PolicyCard: React.FC<PolicyCardProps> = ({ policy, onPolicyUpdated 
         <button className="btn btn-outline" ref={triggerRef} onClick={openEditor}
           disabled={!hasRequiredRole}
           aria-label="Update Rules"
-          title={hasRequiredRole ? 'Publish a new policy version' : 'Requires Policy administrator. Connect using Switch role.'}>
+          title={hasRequiredRole ? 'Publish a new policy version' : 'Requires Policy administrator. Connect Admin to continue.'}>
           <Edit2 size={14} aria-hidden="true" /> Edit
         </button>
       </div>

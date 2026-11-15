@@ -20,7 +20,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const handleDecision = async (decision: 'APPROVE' | 'REJECT') => {
-    if (!hasRequiredRole) { setError('Human approver credential required. Connect it using Switch role.'); return; }
+    if (!hasRequiredRole) { setError('Human approver credential required. Connect Admin to continue.'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -147,11 +147,11 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
         </div>
 
         <p style={{ marginBottom: '20px', color: 'var(--text-muted)', fontSize: '.9rem' }}>
-          Approval uses the separate human-approver credential, or Demo administrator in the isolated simulation profile, configured in API key settings.
+          Approval requires your authenticated human Admin connection.
           The backend records the authenticated identity. This authorization expires at the time shown above.
         </p>
 
-        <p className="required-role-note">{hasRequiredRole ? 'Approval permission verified for the connected credential.' : 'Approve and reject require Human approver, or Demo administrator in simulation. Connect it using Switch role.'}</p>
+        <p className="required-role-note">{hasRequiredRole ? 'Approval permission verified for the connected credential.' : 'Approve and reject require human approval permission. Connect Admin to continue.'}</p>
         {/* Error message */}
         {error && (
           <div

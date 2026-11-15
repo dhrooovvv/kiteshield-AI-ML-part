@@ -4,7 +4,6 @@ import { RefreshCw, MessageSquare } from 'lucide-react';
 import { api, credentialRoleLabels, KiteShieldAPIError } from '../api/client.ts';
 import { useConnectedRoles } from '../useCredentials.ts';
 import type { BackendHealth } from '../types/index.ts';
-import type { CredentialRole } from '../api/client.ts';
 
 interface HeaderProps {
   health: BackendHealth | null;
@@ -18,12 +17,8 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
   const connectedRoles = useConnectedRoles();
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [keyInput, setKeyInput] = useState(api.getApiKey());
-  const [credentialRole, setCredentialRole] = useState<CredentialRole>('proposer');
   const [savingKey, setSavingKey] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
-  const credentialNames = { proposer: 'API_KEY', approver: 'APPROVER_API_KEY', policyAdmin: 'POLICY_ADMIN_API_KEY', demoAdmin: 'DEMO_ADMIN_API_KEY' };
-  const roleDescriptions = { proposer: 'Create and submit payment proposals.', approver: 'Approve or reject escalated payments.', policyAdmin: 'Manage security policies and mandates.', demoAdmin: 'Combined access in isolated simulation only.' };
-  const credentialFile = health?.autonomy_profile === 'sepolia' ? 'credentials.json in the separate Sepolia profile' : health?.autonomy_demo ? 'main-demo-credentials.json in the isolated demo profile' : credentialRole === 'demoAdmin' ? 'backend/.env.demo' : 'backend/.env';
   const keyDialog = useRef<HTMLDialogElement>(null);
   const keyButton = useRef<HTMLButtonElement>(null);
   const verifiedLive = health?.execution_mode === 'sepolia'
@@ -47,18 +42,17 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
     setSavingKey(true);
     setKeyError(null);
     try {
-      await api.verifyAndSaveRoleKey(credentialRole, keyInput);
+      await api.connect(keyInput);
+      setKeyInput('');
       setShowKeyModal(false);
       keyButton.current?.focus();
       onRefreshAll();
     } catch (error) {
-      setKeyError(error instanceof KiteShieldAPIError && error.code === 'CREDENTIAL_ROLE_MISMATCH'
-        ? 'This key belongs to another role. Select its matching role and retry.'
-        : error instanceof KiteShieldAPIError && error.status === 401
-        ? 'Key not accepted. Check the selected role and key.'
+      setKeyError(error instanceof KiteShieldAPIError && error.status === 401
+        ? 'Key not accepted. Check your application key.'
         : error instanceof KiteShieldAPIError && error.code === 'DEMO_ADMIN_SIMULATION_ONLY'
         ? 'Demo credentials work only in isolated simulation.'
-        : 'Verification failed. Check the connection and retry. Your previous key is unchanged.');
+        : 'Verification failed. Check the connection and retry.');
     } finally {
       setSavingKey(false);
     }
@@ -78,22 +72,15 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
           <RefreshCw size={15} aria-hidden="true" />
           <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
         </button>
-        <div className="credential-controls" aria-label="Connected credentials">
-        <button
-          ref={keyButton}
-          className="btn btn-outline"
-          onClick={() => { setKeyError(null); setKeyInput(api.getRoleKey(credentialRole)); setShowKeyModal(true); }}
-        >
-          API key
-        </button>
-        <div className="credential-status" role="status" aria-live="polite">
-          <span>{connectedRoles.length ? 'Connected roles' : 'Not authenticated'}</span>
-          {connectedRoles.length > 0 && <strong>{connectedRoles.map(role => credentialRoleLabels[role]).join(' · ')}</strong>}
-        </div>
-        <button className="btn btn-outline"
-          onClick={() => { setKeyError(null); setKeyInput(api.getRoleKey(credentialRole)); setShowKeyModal(true); }}>
-          Switch role
-        </button>
+        <div className="credential-controls" aria-label="Admin connection">
+          <div className="credential-status" role="status" aria-live="polite">
+            <span>{connectedRoles.length ? 'Connected' : 'Disconnected'}</span>
+            {connectedRoles.length > 0 && <strong>{connectedRoles.includes('admin') ? 'Admin' : credentialRoleLabels[connectedRoles[0]]}</strong>}
+          </div>
+          <button ref={keyButton} className="btn btn-outline" onClick={() => {
+            if (connectedRoles.length) { api.disconnect(); setKeyInput(''); onRefreshAll(); }
+            else { setKeyError(null); setKeyInput(''); setShowKeyModal(true); }
+          }}>{connectedRoles.length ? 'Disconnect' : 'Connect'}</button>
         </div>
       </div>
 
@@ -107,24 +94,10 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
         >
           <div className="glass-panel" style={{ width: '100%', maxWidth: '480px', padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <h3 id="api-key-title" style={{ fontSize: '1.1rem', fontWeight: 600 }}>Connect API key</h3>
+              <h3 id="api-key-title" style={{ fontSize: '1.1rem', fontWeight: 600 }}>Connect to KiteShield</h3>
             </div>
-            <p className="credential-intro">Choose a role and enter its application key.</p>
+            <p className="credential-intro">Enter your Admin application key.</p>
             <form onSubmit={handleSaveKey}>
-              <label htmlFor="credential-role">Role</label>
-              <select id="credential-role" value={credentialRole} disabled={savingKey} style={{ width: '100%', marginBottom: '12px', padding: '10px' }}
-                onChange={(event) => {
-                  const role = event.target.value as typeof credentialRole;
-                  setCredentialRole(role);
-                  setKeyError(null);
-                  setKeyInput(api.getRoleKey(role));
-                }}>
-                <option value="proposer">Proposer</option>
-                <option value="approver">Human approver</option>
-                <option value="policyAdmin">Policy administrator</option>
-                <option value="demoAdmin">Demo administrator (simulation only)</option>
-              </select>
-              <p className="credential-role-hint">{roleDescriptions[credentialRole]}</p>
               <label className="credential-key-label" htmlFor="application-api-key">API key</label>
               <input
                 id="application-api-key"
@@ -148,10 +121,10 @@ export const Header: React.FC<HeaderProps> = ({ health, title, onRefreshAll, loa
                   marginBottom: '8px',
                 }}
               />
-              <p className="credential-key-warning">Never enter a wallet private key or emergency-stop key.</p>
+              <p className="credential-key-warning">Use your application key. Keep wallet keys private.</p>
               <details className="credential-help"><summary>Connection details</summary>
-                <p>Use the value of <code>{health?.autonomy_demo ? credentialRole : credentialNames[credentialRole]}</code> from <code>{credentialFile}</code>.</p>
-                <p>Keys stay in memory until reload. Multiple roles can stay connected.</p>
+                <p>Use your configured Admin key. Access is verified by the server.</p>
+                <p>The key stays in memory until disconnect or reload.</p>
               </details>
               {keyError && <p role="alert" style={{ color: '#a32e3c', marginBottom: '16px' }}>{keyError}</p>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>

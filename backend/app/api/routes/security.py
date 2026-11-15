@@ -30,7 +30,11 @@ async def credential_identity(actor: Annotated[str, Depends(verify_api_key)]) ->
 def _response(state) -> APIResponse:
     # Prevent accidental reflection if an operator includes the credential in
     # an incident reason. The credential itself is never returned or logged.
-    safe_reason = state.reason.replace(get_settings().emergency_stop_admin_api_key, "[REDACTED]")
+    safe_reason = state.reason
+    settings = get_settings()
+    for key in (settings.emergency_stop_admin_api_key, settings.policy_admin_api_key):
+        if key:
+            safe_reason = safe_reason.replace(key, "[REDACTED]")
     return APIResponse(
         data=EmergencyStopResponse(
             active=state.active,
@@ -54,11 +58,13 @@ async def get_kill_switch(
 async def set_kill_switch(
     request: EmergencyStopRequest,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    _: Annotated[str, Depends(verify_emergency_stop_admin)],
+    actor: Annotated[str, Depends(verify_emergency_stop_admin)],
 ) -> APIResponse:
     """Activate or deactivate the execution stop with admin authorization."""
-    admin_key = get_settings().emergency_stop_admin_api_key
-    if admin_key in request.reason:
+    settings = get_settings()
+    if any(key and key in request.reason for key in (
+        settings.emergency_stop_admin_api_key, settings.policy_admin_api_key
+    )):
         raise HTTPException(
             status_code=422,
             detail={
@@ -70,7 +76,7 @@ async def set_kill_switch(
         session,
         active=request.active,
         reason=request.reason,
-        changed_by="emergency_stop_admin",
+        changed_by=actor,
     )
     await audit_service.record_event(
         session=session,
@@ -80,7 +86,7 @@ async def set_kill_switch(
             else "EMERGENCY_STOP_DEACTIVATED"
         ),
         correlation_id=correlation_id_var.get(),
-        actor="emergency_stop_admin",
+        actor=actor,
         details={"active": state.active, "version": state.version},
     )
     return _response(state)

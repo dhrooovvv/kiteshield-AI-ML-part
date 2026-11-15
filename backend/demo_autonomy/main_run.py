@@ -15,6 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--enable-autonomy", action="store_true")
     parser.add_argument("--enable-quarantine", action="store_true")
+    parser.add_argument("--enable-commerce", action="store_true")
+    parser.add_argument("--unified-admin", action="store_true")
     parser.add_argument("--resume", type=Path)
     args = parser.parse_args()
     directory = (
@@ -37,6 +39,8 @@ def main():
         "http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001"
     )
     settings.autonomy_enabled = args.enable_autonomy
+    settings.autonomy_commerce_enabled = args.enable_commerce
+    settings.unified_admin_enabled = args.unified_admin
     settings.autonomy_quarantine_enabled = args.enable_quarantine
     settings.autonomy_profile_dir = str(directory)
     settings.autonomy_model = model

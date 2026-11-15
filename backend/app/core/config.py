@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # Isolated demo integration; never enables funded-wallet execution.
     autonomy_enabled: bool = False
+    autonomy_commerce_enabled: bool = False
     autonomy_profile_dir: str = ""
     autonomy_quarantine_enabled: bool = False
     autonomy_model: str = "kiteshield-gemma4:12b-q4km"
@@ -109,6 +110,7 @@ class Settings(BaseSettings):
     approver_api_key: str = Field(default="", repr=False)
     policy_admin_api_key: str = Field(default="", repr=False)
     demo_admin_api_key: str = Field(default="", repr=False)
+    unified_admin_enabled: bool = False
     # Drafting only. Aliases are public addresses configured by the deployment administrator.
     drafter_recipient_aliases: dict[str, str] = Field(default_factory=dict)
     drafter_llm_enabled: bool = Field(default=False)
@@ -290,6 +292,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def distinct_roles(self) -> Self:
+        if self.unified_admin_enabled and not self.policy_admin_api_key:
+            raise ValueError("Unified administrator requires POLICY_ADMIN_API_KEY")
         values = [self.api_key, self.emergency_stop_admin_api_key]
         for key in (self.approver_api_key, self.policy_admin_api_key, self.demo_admin_api_key):
             if key:

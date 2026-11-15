@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import correlation_id_var
-from app.core.security import require_policy_admin, require_proposer, verify_api_key
+from app.core.security import (
+    is_unified_admin,
+    require_policy_admin,
+    require_proposer,
+    verify_api_key,
+)
 from app.db import get_db_session
 from app.exceptions import NotFoundError, SigningRejectedError
 from app.models import Policy, Proposal, VaultOperation, VaultRegistry, generate_uuid
@@ -105,7 +110,7 @@ async def saved(session, request_key, kind, actor, amount=None):
         payload = VaultPayload.model_validate_json(op.payload)
         if (
             op.kind != kind.value
-            or op.authorized_by != actor
+            or (op.authorized_by != actor and not is_unified_admin(actor))
             or (amount is not None and payload.amount_wei != amount)
         ):
             raise SigningRejectedError("Idempotency key conflicts with its immutable vault intent")
@@ -346,7 +351,7 @@ async def get_operation(operation_id: str, session: Session, _: Reader):
 @router.post("/operations/{operation_id}/prepare")
 async def prepare(operation_id: str, session: Session, actor: Reader):
     op = await operation(session, operation_id)
-    if actor != op.authorized_by:
+    if actor != op.authorized_by and not is_unified_admin(actor):
         raise SigningRejectedError("The matching role is required")
     if op.proposal_id:
         from app.services.vault_execution import proposal_with_relations
@@ -369,7 +374,7 @@ async def execute(
     operation_id: str, session: Session, actor: Reader, limits: VaultExecutionLimits | None = None
 ):
     op = await operation(session, operation_id)
-    if actor != op.authorized_by:
+    if actor != op.authorized_by and not is_unified_admin(actor):
         raise SigningRejectedError("Only the role that created this typed intent may execute it")
     if op.proposal_id:
         await execute_vault_payment(session, op, capability, signer, blockchain, audit, limits)

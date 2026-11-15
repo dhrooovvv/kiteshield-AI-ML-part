@@ -178,7 +178,7 @@ export const ProposalCard: React.FC<ProposalCardProps> = ({
         allowlist, current policy, and pending executions before reevaluating this proposal.
       </p>}
 
-      {(isSignable || isResumable || proposal.status === 'PROPOSED') && !hasRequiredRole && <p className="required-role-note">Proposer required. Connect using Switch role.</p>}
+      {(isSignable || isResumable || proposal.status === 'PROPOSED') && !hasRequiredRole && <p className="required-role-note">Proposer required. Connect Admin to continue.</p>}
       {proposal.transaction?.tx_hash && (isResumable || isSignable || automatic) && executionActions}
       <footer className="proposal-card-footer">
         <div className="proposal-card-actions">

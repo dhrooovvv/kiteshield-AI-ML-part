@@ -72,7 +72,7 @@ class WorkflowEngine(Engine):
             with self.db() as db:
                 self.event(db, "system", "EXTERNAL_DATA_ONLY", kind)
 
-    def create(self, goal, request_key):
+    def create(self, goal, request_key, **bindings):
         if self.control()["quarantined"]:
             raise HumanRequiredError("SELF_QUARANTINED")
         if re.search(
@@ -89,7 +89,7 @@ class WorkflowEngine(Engine):
             flags=re.I,
         )
         try:
-            return super().create(goal, request_key)
+            return super().create(goal, request_key, **bindings)
         except (HumanRequiredError, ValueError):
             self.issue(None, "GOAL_VALIDATION_BLOCK")
             raise

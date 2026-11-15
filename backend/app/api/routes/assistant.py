@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.proposals import agent_propose, evaluate_proposal, get_proposal
 from app.core.config import get_settings
-from app.core.security import require_proposer, verify_api_key
+from app.core.security import is_unified_admin, require_proposer, verify_api_key
 from app.db import get_db_session
 from app.models.assistant import AssistantPaymentDraft
 from app.models.invoice_agent import InvoiceAgentTask
@@ -110,7 +110,7 @@ async def submit(
     draft = await session.get(AssistantPaymentDraft, str(draft_id), populate_existing=True)
     if draft is None:
         refuse("NOT_FOUND", "Payment draft not found.", 404)
-    if draft.actor != actor:
+    if draft.actor != actor and not is_unified_admin(actor):
         refuse("ROLE_FORBIDDEN", "This role cannot submit the payment draft.", 403)
     # A replay only reads the same proposal, even after confirmation/expiry/rejection.
     # It never reevaluates, signs again or creates another payment.

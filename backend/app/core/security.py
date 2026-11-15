@@ -58,6 +58,10 @@ async def verify_api_key(
         )
 
     settings = get_settings()
+    if settings.unified_admin_enabled and settings.policy_admin_api_key and secrets.compare_digest(
+        api_key, settings.policy_admin_api_key
+    ):
+        return "administrator"
     if settings.demo_admin_api_key and secrets.compare_digest(api_key, settings.demo_admin_api_key):
         if (
             settings.app_env != "demo"
@@ -97,7 +101,7 @@ async def verify_api_key(
 
 
 async def require_approver(actor: Annotated[str, Security(verify_api_key)]) -> str:
-    if actor not in ("human_approver", "demo_admin"):
+    if actor not in ("human_approver", "demo_admin") and not is_unified_admin(actor):
         raise HTTPException(
             403, detail={"code": "ROLE_FORBIDDEN", "message": "Human approver credential required"}
         )
@@ -105,7 +109,7 @@ async def require_approver(actor: Annotated[str, Security(verify_api_key)]) -> s
 
 
 async def require_proposer(actor: Annotated[str, Security(verify_api_key)]) -> str:
-    if actor not in ("proposer", "demo_admin"):
+    if actor not in ("proposer", "demo_admin") and not is_unified_admin(actor):
         raise HTTPException(
             403, detail={"code": "ROLE_FORBIDDEN", "message": "Proposer credential required"}
         )
@@ -113,7 +117,7 @@ async def require_proposer(actor: Annotated[str, Security(verify_api_key)]) -> s
 
 
 async def require_policy_admin(actor: Annotated[str, Security(verify_api_key)]) -> str:
-    if actor not in ("policy_administrator", "demo_admin"):
+    if actor not in ("policy_administrator", "demo_admin") and not is_unified_admin(actor):
         raise HTTPException(
             403,
             detail={
@@ -126,8 +130,18 @@ async def require_policy_admin(actor: Annotated[str, Security(verify_api_key)]) 
 
 async def verify_emergency_stop_admin(
     api_key: Annotated[str | None, Security(emergency_stop_admin_api_key_header)],
+    human_key: Annotated[str | None, Security(api_key_header)] = None,
 ) -> str:
     """Verify the dedicated emergency-stop administration credential."""
+    settings = get_settings()
+    candidate = api_key if api_key is not None else human_key
+    if (
+        settings.unified_admin_enabled
+        and settings.policy_admin_api_key
+        and candidate
+        and secrets.compare_digest(candidate, settings.policy_admin_api_key)
+    ):
+        return "administrator"
     if api_key is None:
         raise HTTPException(
             status_code=401,
@@ -137,7 +151,6 @@ async def verify_emergency_stop_admin(
             },
         )
 
-    settings = get_settings()
     if not secrets.compare_digest(api_key, settings.emergency_stop_admin_api_key):
         raise HTTPException(
             status_code=403,
@@ -148,6 +161,10 @@ async def verify_emergency_stop_admin(
         )
 
     return "emergency_stop_admin"
+
+
+def is_unified_admin(actor: str) -> bool:
+    return actor == "administrator" and get_settings().unified_admin_enabled
 
 
 def generate_correlation_id() -> str:

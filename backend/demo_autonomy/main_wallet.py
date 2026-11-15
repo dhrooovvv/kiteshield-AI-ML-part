@@ -72,7 +72,7 @@ class MainAuthority:
 
 
 class MainWorkflowEngine(SepoliaWorkflowEngine):
-    def create(self, goal, request_key):
+    def create(self, goal, request_key, **bindings):
         # Deterministic decimal conversion; Gemma never chooses executable amounts.
         match = re.fullmatch(
             r"fund my wallet if needed, then pay ([0-9]+(?:\.[0-9]{1,18})?) ETH "
@@ -83,7 +83,7 @@ class MainWorkflowEngine(SepoliaWorkflowEngine):
         if match:
             amount = int(Decimal(match[1]) * 10**18)
             goal = f"fund if needed, pay supplier {match[2]} {amount} wei, verify"
-        return super().create(goal, request_key)
+        return super().create(goal, request_key, **bindings)
 
     def initialize(self):
         super().initialize()
@@ -549,6 +549,8 @@ def mount_main_wallet(app, settings):
         Settings(
             directory,
             enabled=True,
+            commerce_enabled=settings.autonomy_commerce_enabled,
+            unified_admin_enabled=settings.unified_admin_enabled,
             planner_enabled=True,
             model=settings.autonomy_model,
             model_digest=settings.autonomy_model_digest,

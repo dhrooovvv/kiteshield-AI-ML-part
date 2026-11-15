@@ -23,7 +23,7 @@ export const DirectProposalForm: React.FC<DirectProposalFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasRequiredRole) { setError('Proposer credential required. Connect it using Switch role.'); return; }
+    if (!hasRequiredRole) { setError('Proposer credential required. Connect Admin to continue.'); return; }
     setLoading(true);
     setError(null);
 
@@ -47,7 +47,7 @@ export const DirectProposalForm: React.FC<DirectProposalFormProps> = ({
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      <p className="required-role-note">{hasRequiredRole ? 'Proposal permission verified.' : 'Requires Proposer, or Demo administrator in simulation. Connect it using Switch role.'}</p>
+      <p className="required-role-note">{hasRequiredRole ? 'Proposal permission verified.' : 'Requires permission to create proposals. Connect Admin to continue.'}</p>
       <div>
         <label style={{ fontSize: '0.8rem', color: 'var(--text-dim)', display: 'block', marginBottom: '6px' }}>
           Destination Address (Sepolia):

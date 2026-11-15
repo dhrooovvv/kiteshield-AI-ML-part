@@ -1,6 +1,6 @@
 import { Inbox, Layers, Repeat, Wallet } from 'lucide-react';
 
-export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury' | 'invoices' | 'autonomy';
+export type NavTab = 'overview' | 'proposals' | 'approvals' | 'policies' | 'audit' | 'portfolio' | 'treasury' | 'invoices' | 'autonomy' | 'commerce';
 
 const reviewTabs = [
   { id: 'approvals', label: 'Human Approvals' },
@@ -10,6 +10,7 @@ const reviewTabs = [
 ] satisfies { id: NavTab; label: string }[];
 
 const workflowTabs = [
+  { id: 'commerce', label: 'Autonomous purchase' },
   { id: 'overview', label: 'Overview' },
   { id: 'treasury', label: 'Treasury Autopilot' },
   { id: 'invoices', label: 'Accounts Payable' },
@@ -23,6 +24,7 @@ function workspaceSection(tab: NavTab) {
 
 interface NavigationProps {
   autonomyEnabled?: boolean;
+  commerceEnabled?: boolean;
   currentTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   pendingApprovalsCount: number;
@@ -30,12 +32,12 @@ interface NavigationProps {
 }
 
 export function Navigation({
-  autonomyEnabled, currentTab, onTabChange, pendingApprovalsCount, promptReviewsCount,
+  autonomyEnabled, commerceEnabled, currentTab, onTabChange, pendingApprovalsCount, promptReviewsCount,
 }: NavigationProps) {
   const section = workspaceSection(currentTab);
   const attention = pendingApprovalsCount + promptReviewsCount;
   const tabs = [
-    { section: 'workflows', id: 'overview' as const, label: 'Workflows', icon: Layers },
+    { section: 'workflows', id: commerceEnabled ? 'commerce' as const : 'overview' as const, label: 'Workflows', icon: Layers },
     ...(autonomyEnabled ? [{ section: 'autonomy', id: 'autonomy' as const, label: 'Agent', icon: Repeat }] : []),
     { section: 'portfolio', id: 'portfolio' as const, label: 'Wallet', icon: Wallet },
     { section: 'review', id: 'approvals' as const, label: 'Review', icon: Inbox, badge: attention },
@@ -57,13 +59,13 @@ export function Navigation({
   </aside>;
 }
 
-export function WorkspaceNavigation({ currentTab, onTabChange }: Pick<NavigationProps, 'currentTab' | 'onTabChange'>) {
+export function WorkspaceNavigation({ currentTab, onTabChange, commerceEnabled }: Pick<NavigationProps, 'currentTab' | 'onTabChange' | 'commerceEnabled'>) {
   const section = workspaceSection(currentTab);
   const tabs = section === 'review' ? reviewTabs : section === 'workflows' ? workflowTabs : null;
   if (!tabs) return null;
 
   return <nav className="workspace-subnav" aria-label={section === 'review' ? 'Review tools' : 'Workflows'}>
-    {tabs.map(tab => <button key={tab.id} className="btn btn-outline"
+    {tabs.filter(tab => tab.id !== 'commerce' || commerceEnabled).map(tab => <button key={tab.id} className="btn btn-outline"
       aria-current={currentTab === tab.id ? 'page' : undefined}
       onClick={() => onTabChange(tab.id)}>{tab.label}</button>)}
   </nav>;

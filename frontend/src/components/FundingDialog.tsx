@@ -75,7 +75,7 @@ export function FundingDialog({ onClose, onFunded }: { onClose: () => void; onFu
       <span className="funding-mode">{!status ? 'Testnet only · Ethereum Sepolia' : status.mode === 'sepolia' ? 'Sepolia faucet · chain 11155111' : 'Simulation · no on-chain funding'}</span>
       {!status && !error && <p role="status">Loading configured wallets…</p>}
       {status?.unavailable_reason && <p className="required-role-note">{status.unavailable_reason}</p>}
-      {!allowed && <p>Proposer required. Connect using Switch role.</p>}
+      {!allowed && <p>Proposer required. Connect Admin to continue.</p>}
       {status && !status.wallets.length && <p>Which wallet should I fund? Add a public address to WATCHED_ADDRESSES in backend configuration, then restart. Never enter a private key.</p>}
       <form onSubmit={event => { event.preventDefault(); void run(async () => {
         const plan = await api.planFunding(prompt, address || undefined);
