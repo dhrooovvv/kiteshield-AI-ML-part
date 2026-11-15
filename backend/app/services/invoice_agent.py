@@ -12,7 +12,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.core.security import reject_credentials_in_text
+from app.core.security import is_unified_admin, reject_credentials_in_text
 from app.models import ExecutionAttempt, Proposal, Transaction, utc_now_str
 from app.models.invoice_agent import InvoiceAgentItem, InvoiceAgentTask
 from app.models.invoices import InvoiceRecord
@@ -314,7 +314,7 @@ async def cancel_task(session, task_id, actor):
     task = await session.get(InvoiceAgentTask, task_id, populate_existing=True)
     if task is None:
         refuse("NOT_FOUND", "Invoice task not found.", 404)
-    if task.actor != actor:
+    if task.actor != actor and not is_unified_admin(actor):
         refuse("ROLE_FORBIDDEN", "This role cannot cancel that task.", 403)
     if task.state not in FINAL:
         task.cancel_requested = True

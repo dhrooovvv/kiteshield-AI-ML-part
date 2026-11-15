@@ -128,7 +128,7 @@ test('payment UI clearly labels simulation and never presents caller-entered app
       },
       onClose: () => {}, onDecided: () => {},
     }));
-    assert.match(approval, /separate human-approver credential/);
+    assert.match(approval, /authenticated human Admin connection/);
     assert.doesNotMatch(approval, /value="user:|Approver Identity/);
     const { ProposalCard } = await server.ssrLoadModule('/src/components/ProposalCard.tsx');
     const card = renderToStaticMarkup(createElement(ProposalCard, {
@@ -158,7 +158,7 @@ test('verified roles control the header and each restricted action independently
     context.mock.method(globalThis, 'fetch', async (_url: string, options: RequestInit) => {
       const key = (options.headers as Record<string, string>)['X-API-Key'];
       return Response.json({ data: { role: key === 'human' ? 'human_approver'
-        : key === 'admin' ? 'policy_administrator' : key === 'demo' ? 'demo_admin' : 'proposer' } });
+        : key === 'admin' ? 'policy_administrator' : key === 'unified' ? 'administrator' : key === 'demo' ? 'demo_admin' : 'proposer' } });
     });
     const { Header } = await server.ssrLoadModule('/src/components/Header.tsx');
     const { PolicyCard } = await server.ssrLoadModule('/src/components/PolicyCard.tsx');
@@ -186,8 +186,9 @@ test('verified roles control the header and each restricted action independently
       assert.ok(match, 'Button exists: ' + text);
       return match[1].includes('disabled');
     };
-    assert.match(renderHeader(), /Not authenticated/);
-    assert.match(renderHeader(), /Switch role/);
+    assert.match(renderHeader(), /Disconnected/);
+    assert.match(renderHeader(), /Connect/);
+    assert.doesNotMatch(renderHeader(), /Switch role|credential-role/);
     assert.equal(buttonIsDisabled(renderPolicy(), 'Create Initial Policy'), true);
     assert.equal(buttonIsDisabled(renderApproval(), 'Approve Authorization'), true);
     assert.equal(buttonIsDisabled(renderApproval(), 'Reject Proposal'), true);
@@ -205,8 +206,9 @@ test('verified roles control the header and each restricted action independently
     await client.verifyAndSaveRoleKey('policyAdmin', 'admin');
     assert.equal(buttonIsDisabled(renderPolicy(), 'Create Initial Policy'), false);
     const header = renderHeader();
-    assert.match(header, /Connected roles/);
-    assert.match(header, /Proposer · Human approver · Policy administrator/);
+    assert.match(header, /Connected/);
+    assert.match(header, /Proposer/);
+    assert.doesNotMatch(header, /Connected roles/);
     assert.match(header, /Simulation · no on-chain broadcast/);
     client.setRoleKey('policyAdmin', '');
     assert.equal(buttonIsDisabled(renderPolicy(), 'Create Initial Policy'), true);
@@ -214,6 +216,14 @@ test('verified roles control the header and each restricted action independently
     client.setApiKey('');
     client.setRoleKey('approver', '');
     client.setRoleKey('policyAdmin', '');
+    await client.connect('unified');
+    assert.match(renderHeader(), /<strong>Admin<\/strong>/);
+    assert.doesNotMatch(renderHeader(), /Proposer ·|Switch role/);
+    assert.equal(buttonIsDisabled(renderPolicy(), 'Create Initial Policy'), false);
+    assert.equal(buttonIsDisabled(renderApproval(), 'Approve Authorization'), false);
+    assert.equal(buttonIsDisabled(renderPayment(), 'Sign &amp; simulate'), false);
+    client.disconnect();
+    assert.equal(buttonIsDisabled(renderApproval(), 'Approve Authorization'), true);
     await client.verifyAndSaveRoleKey('demoAdmin', 'demo');
     assert.match(renderHeader(), /Demo administrator \(simulation only\)/);
     assert.equal(buttonIsDisabled(renderPolicy(), 'Create Initial Policy'), false);

@@ -13,6 +13,7 @@ from sqlalchemy import select
 from web3 import Web3
 
 from app.core.config import get_settings
+from app.core.security import is_unified_admin
 from app.exceptions import SigningRejectedError
 from app.models import Policy, Proposal, SpendingRecord, VaultOperation, VaultRegistry
 from app.schemas import NormalizedAction
@@ -171,9 +172,9 @@ async def validate_operation(session, op, blockchain, *, envelope=False, broadca
     if op.sender != expected_sender.lower():
         reject("Vault sender does not match its typed role")
     if payload.agent_operation:
-        if op.authorized_by != "proposer":
+        if op.authorized_by != "proposer" and not is_unified_admin(op.authorized_by):
             reject("Agent operation lacks proposer intent")
-    elif op.authorized_by != "policy_administrator":
+    elif op.authorized_by != "policy_administrator" and not is_unified_admin(op.authorized_by):
         reject("Owner operation lacks administrator intent")
     if payload.kind == VaultKind.PAY:
         if not settings.autonomy_vault_payments_enabled or not op.proposal_id:

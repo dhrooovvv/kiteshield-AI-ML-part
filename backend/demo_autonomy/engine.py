@@ -50,6 +50,8 @@ class Settings:
     wallet_services_enabled: bool = False
     mode: Literal["SIMULATED", "SEPOLIA"] = "SIMULATED"
     wallet_source: Literal["isolated-demo", "separate-sepolia", "existing-main"] = "isolated-demo"
+    commerce_enabled: bool = False
+    unified_admin_enabled: bool = False
 
 
 class HumanRequiredError(Exception):
@@ -173,7 +175,7 @@ class Engine:
                 (supplier, recipient.lower(), payment_cap, funding_cap),
             )
 
-    def create(self, goal, request_key):
+    def create(self, goal, request_key, *, expected_mandate=None, required_backend=None):
         self.require_enabled()
         if not re.fullmatch(r"[A-Za-z0-9_-]{8,100}", request_key):
             raise ValueError("INVALID_REQUEST_KEY")
@@ -183,10 +185,26 @@ class Engine:
             if prior:
                 if prior["goal"] != goal:
                     raise ValueError("IDEMPOTENCY_CONFLICT")
+                if (
+                    expected_mandate is not None
+                    and json.loads(prior["mandate"]) != expected_mandate
+                ):
+                    raise HumanRequiredError("MERCHANT_QUOTE_AUTHORITY_CHANGED")
+                if required_backend is not None:
+                    binding = db.execute(
+                        "SELECT value FROM task_backend WHERE task_id=?", (prior["id"],)
+                    ).fetchone()
+                    if binding is None or json.loads(binding[0]).get("backend") != required_backend:
+                        raise HumanRequiredError("COMMERCE_VAULT_REQUIRED")
                 return prior["id"]
             mandate = db.execute("SELECT * FROM mandates WHERE id=1").fetchone()
             if not mandate:
                 raise HumanRequiredError("ADMIN_MANDATE_REQUIRED")
+            if expected_mandate is not None and dict(mandate) != expected_mandate:
+                raise HumanRequiredError("MERCHANT_QUOTE_AUTHORITY_CHANGED")
+            context = self.context_for_new_task()
+            if required_backend is not None and context.get("backend") != required_backend:
+                raise HumanRequiredError("COMMERCE_VAULT_REQUIRED")
             # Exact public grammar. Voice/documents/events are not alternate authority channels.
             pattern = (
                 r"fund if needed, pay supplier "
@@ -217,7 +235,7 @@ class Engine:
             )
             db.execute(
                 "INSERT INTO task_backend VALUES(?,?)",
-                (task_id, json.dumps(self.context_for_new_task())),
+                (task_id, json.dumps(context)),
             )
             self.event(
                 db, task_id, "GOAL_ACCEPTED", self.settings.mode + "; administrator mandate bound"

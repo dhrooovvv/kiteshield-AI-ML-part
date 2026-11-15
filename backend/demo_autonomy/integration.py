@@ -30,6 +30,8 @@ def mount_autonomy(app, settings):
         Settings(
             directory,
             enabled=True,
+            commerce_enabled=settings.autonomy_commerce_enabled,
+            unified_admin_enabled=settings.unified_admin_enabled,
             planner_enabled=True,
             model=settings.autonomy_model,
             model_digest=settings.autonomy_model_digest,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useSyncExternalStore } from 'react';
 import { Header } from './components/Header.tsx';
 import { Navigation, WorkspaceNavigation, type NavTab } from './components/Navigation.tsx';
 import { OverviewView } from './views/OverviewView.tsx';
@@ -20,12 +20,23 @@ import { AssistantDialog } from './components/AssistantDialog.tsx';
 import { FundingDialog } from './components/FundingDialog.tsx';
 import { AutonomyView } from './views/AutonomyView.tsx';
 import { autonomyAvailable } from './autonomy.ts';
+import { commerceAvailable } from './commerce.ts';
+import { CommerceView } from './views/CommerceView.tsx';
 
 export const App: React.FC = () => {
+  const roles = useSyncExternalStore(api.subscribeCredentials, api.getConnectedRoles, api.getServerConnectedRoles);
+  const [commerceAdvertised, setCommerceEnabled] = useState(false);
+  const commerceEnabled = roles.includes('proposer') && commerceAdvertised;
+  useEffect(() => {
+    let active = true;
+    if (!roles.includes('proposer')) return;
+    void commerceAvailable().then(value => { if (active) setCommerceEnabled(value); });
+    return () => { active = false; };
+  }, [roles]);
   const [autonomyEnabled, setAutonomyEnabled] = useState(false);
   useEffect(() => { let active = true; void autonomyAvailable().then(value => { if (active) setAutonomyEnabled(value); }); return () => { active = false; }; }, []);
   const [selectedTab, setCurrentTab] = useState<NavTab | null>(null);
-  const currentTab = selectedTab ?? (autonomyEnabled ? 'autonomy' : 'overview');
+  const currentTab = selectedTab === 'commerce' && !commerceEnabled ? 'overview' : selectedTab ?? (commerceEnabled ? 'commerce' : autonomyEnabled ? 'autonomy' : 'overview');
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [fundingOpen, setFundingOpen] = useState(false);
   const [health, setHealth] = useState<BackendHealth | null>(null);
@@ -105,7 +116,7 @@ export const App: React.FC = () => {
         (result) => result.status === 'rejected' && result.reason instanceof KiteShieldAPIError && result.reason.status === 401
       );
       setGlobalError(authenticationFailed && !api.getConnectedRoles().length ? null : authenticationFailed
-        ? 'The backend is reachable, but authentication failed. Open API key and verify the credential for its matching role. Keys and verified roles are cleared when the page reloads.'
+        ? 'The backend is reachable, but authentication failed. Reconnect your Admin application key. Keys and verified roles are cleared when the page reloads.'
         : failures.length ? 'Could not refresh: ' + failures.join(', ') + '. Previously loaded data may be out of date. Check your connection and API key, then retry.' : null);
       if (!failures.length) setLastRefreshed(new Date().toLocaleTimeString());
       setRefreshRevision((value) => value + 1);
@@ -164,13 +175,14 @@ export const App: React.FC = () => {
     <div className="app-shell">
       <Navigation
         autonomyEnabled={autonomyEnabled}
+        commerceEnabled={commerceEnabled}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         pendingApprovalsCount={pendingApprovals.length}
         promptReviewsCount={humanAttentionCount - pendingApprovals.length}
       />
       <div className="app-main">
-        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio', treasury: 'Treasury Autopilot', invoices: 'Accounts Payable', autonomy: 'Autonomous Tasks' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} onOpenAssistant={() => setAssistantOpen(true)} />
+        <Header title={{ overview: 'Overview', proposals: 'Proposals', approvals: 'Human Approvals', policies: 'Policy Engine', audit: 'Audit Explorer', portfolio: 'Portfolio', treasury: 'Treasury Autopilot', invoices: 'Accounts Payable', autonomy: 'Autonomous Tasks', commerce: 'Autonomous purchase' }[currentTab]} health={health} onRefreshAll={handleManualRefresh} loading={loading} onOpenAssistant={() => setAssistantOpen(true)} />
 
       {/* Global error banner if backend is unreachable */}
       {globalError && (
@@ -199,8 +211,8 @@ export const App: React.FC = () => {
 
       {/* Main Content View Container */}
       <main className="content-shell">
-        <WorkspaceNavigation currentTab={currentTab} onTabChange={setCurrentTab} />
-        {currentTab !== 'portfolio' && currentTab !== 'approvals' && currentTab !== 'treasury' && currentTab !== 'invoices' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
+        <WorkspaceNavigation commerceEnabled={commerceEnabled} currentTab={currentTab} onTabChange={setCurrentTab} />
+        {currentTab !== 'commerce' && currentTab !== 'portfolio' && currentTab !== 'approvals' && currentTab !== 'treasury' && currentTab !== 'invoices' && <p className="refresh-status" role="status">{loading ? 'Refreshing data…' : lastRefreshed ? 'Last updated ' + lastRefreshed : 'Waiting for data'}</p>}
         {currentTab === 'overview' && (
           <OverviewView
             blockedAttemptsCount={blockedCount}
@@ -248,6 +260,7 @@ export const App: React.FC = () => {
           />
         )}
 
+        {currentTab === 'commerce' && commerceEnabled && <CommerceView />}
         {currentTab === 'autonomy' && autonomyEnabled && <AutonomyView />}
         {currentTab === 'audit' && <AuditView refreshRevision={refreshRevision} />}
         {currentTab === 'invoices' && <InvoicesView refreshRevision={refreshRevision} />}

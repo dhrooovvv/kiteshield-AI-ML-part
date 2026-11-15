@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager, suppress
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from demo_autonomy.commerce import Commerce
 from demo_autonomy.engine import Engine, HumanRequiredError, Settings, SimulatedAdapter
 
 
@@ -87,6 +88,10 @@ def create_demo(
             raise HTTPException(403, "ADMIN_REQUIRED")
 
     def agent(authorization: str = Header(default=""), x_api_key: str = Header(default="")):
+        if settings.unified_admin_enabled and secrets.compare_digest(
+            credential(authorization, x_api_key), "Bearer " + admin_token
+        ):
+            return
         if not secrets.compare_digest(
             credential(authorization, x_api_key), "Bearer " + agent_token
         ):
@@ -97,10 +102,16 @@ def create_demo(
             raise HTTPException(503, "AUTONOMY_DISABLED")
 
     def approver(authorization: str = Header(default=""), x_api_key: str = Header(default="")):
+        if settings.unified_admin_enabled and secrets.compare_digest(
+            credential(authorization, x_api_key), "Bearer " + admin_token
+        ):
+            return
         if not approver_token or not secrets.compare_digest(
             credential(authorization, x_api_key), "Bearer " + approver_token
         ):
             raise HTTPException(403, "HUMAN_APPROVER_REQUIRED")
+
+    commerce = Commerce(engine)
 
     async def worker(adapter):
         async def advance(row):
@@ -113,6 +124,8 @@ def create_demo(
                 engine.hold(row["id"], "WORKER_FAILURE")
 
         while True:
+            if settings.commerce_enabled:
+                commerce.resume_pending()
             with engine.db() as db:
                 rows = db.execute(
                     "SELECT id,state FROM tasks "
@@ -127,6 +140,8 @@ def create_demo(
         task = None
         if settings.enabled:
             engine.initialize()
+            if settings.commerce_enabled:
+                commerce.initialize()
             if settings.wallet_services_enabled:
                 from demo_autonomy.sandbox import WalletServicesAdapter
 
@@ -158,6 +173,7 @@ def create_demo(
             "mode": settings.mode,
             "enabled": settings.enabled,
             "planner_enabled": settings.planner_enabled,
+            "commerce_enabled": settings.commerce_enabled,
             "signing": (settings.wallet_source if settings.mode == "SEPOLIA" else "test-key-only")
             if settings.wallet_services_enabled
             else False,
@@ -332,5 +348,47 @@ def create_demo(
     def resume():
         engine.resume()
         return engine.control()
+
+    class Purchase(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        order_id: str = Field(min_length=36, max_length=36)
+        goal: str = Field(min_length=1, max_length=500)
+        scenario: str = Field(default="standard", pattern="^(standard|tampered)$")
+
+    class Checkout(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        quote_digest: str = Field(pattern="^[a-f0-9]{64}$")
+        total_wei: str = Field(pattern="^[0-9]{1,30}$")
+        recipient: str = Field(pattern="^0x[0-9a-fA-F]{40}$")
+
+    def commerce_call(operation, *args, **kwargs):
+        try:
+            return operation(*args, **kwargs)
+        except KeyError as exc:
+            raise HTTPException(404, "ORDER_NOT_FOUND") from exc
+        except (ValueError, HumanRequiredError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/commerce/catalog", dependencies=[Depends(enabled), Depends(agent)])
+    async def purchase_catalog():
+        return commerce_call(commerce.catalog)
+
+    @app.get("/commerce/orders", dependencies=[Depends(enabled), Depends(agent)])
+    async def purchase_orders():
+        return commerce_call(commerce.list)
+
+    @app.post("/commerce/orders", dependencies=[Depends(enabled), Depends(agent)])
+    async def purchase_create(payload: Purchase):
+        return commerce_call(commerce.create, **payload.model_dump())
+
+    @app.get("/commerce/orders/{order_id}", dependencies=[Depends(enabled), Depends(agent)])
+    async def purchase_get(order_id: str):
+        return commerce_call(commerce.get, order_id)
+
+    @app.post(
+        "/commerce/orders/{order_id}/checkout", dependencies=[Depends(enabled), Depends(agent)]
+    )
+    async def purchase_checkout(order_id: str, payload: Checkout):
+        return commerce_call(commerce.checkout, order_id, **payload.model_dump())
 
     return app

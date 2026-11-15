@@ -22,7 +22,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.live_rpc import validate_live_rpc_url
-from app.core.security import reject_credentials_in_text
+from app.core.security import is_unified_admin, reject_credentials_in_text
 from app.models.funding import FundingRequest
 from app.services.audit import AuditService
 from app.services.emergency_stop import EmergencyStopService
@@ -246,7 +246,7 @@ async def submit(session, request_id, actor):
     row = await session.get(FundingRequest, request_id, populate_existing=True)
     if row is None:
         refuse("NOT_FOUND", "Funding request not found.", 404)
-    if row.actor != actor:
+    if row.actor != actor and not is_unified_admin(actor):
         refuse("ROLE_FORBIDDEN", "This role cannot submit this request.", 403)
     if row.state != "PREPARED":
         return public(row)  # Durable idempotency. REQUESTING is never retried.

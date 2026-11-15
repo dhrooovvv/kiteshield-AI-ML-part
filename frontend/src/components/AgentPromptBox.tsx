@@ -136,7 +136,7 @@ export const AgentPromptBox: React.FC<AgentPromptBoxProps> = ({ onProposalCreate
         </div>
       </div>
 
-      {!hasRequiredRole && <p className="required-role-note">Proposer required. Connect using Switch role.</p>}
+      {!hasRequiredRole && <p className="required-role-note">Proposer required. Connect Admin to continue.</p>}
       {/* Custom prompt input */}
       <div className="agent-prompt-entry">
         <div style={{ flex: 1, position: 'relative' }}>

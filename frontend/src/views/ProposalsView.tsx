@@ -60,7 +60,7 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
         </button>
       </div>
 
-      {!hasRequiredRole && <p className="required-role-note proposals-role-note">Creating, evaluating, and submitting proposals requires Proposer. Connect it using Switch role.</p>}
+      {!hasRequiredRole && <p className="required-role-note proposals-role-note">Creating, evaluating, and submitting proposals requires Proposer. Connect Admin to continue.</p>}
       {showDirectForm && (
         <div id="direct-proposal-form" className="glass-panel proposals-direct-form">
           <h3>Submit a structured proposal</h3>

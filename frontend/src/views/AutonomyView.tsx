@@ -100,7 +100,7 @@ export function AutonomyView() {
   return <section className="autonomy-main" aria-label="Autonomous tasks workspace">
     {!connected ? <div className="autonomy-card autonomy-empty">
       <Wallet size={20} aria-hidden="true" /><div><h2>Connect to Autonomous Tasks</h2>
-      <p>Use <strong>API key</strong> to connect your Proposer role.</p></div>
+      <p>Connect Admin to start autonomous tasks.</p></div>
     </div> : <>
       {isSepolia && <section className="autonomy-card autonomy-overview" aria-label="Wallet and vault">
         <div className="autonomy-overview-grid">

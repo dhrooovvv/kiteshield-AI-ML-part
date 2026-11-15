@@ -76,7 +76,7 @@ export function VendorForm({ vendor, allowed, onSaved, create = false, onBusyCha
       : error instanceof Error ? error.message : 'Save failed. Refresh and retry.'); }
     finally { setBusy(false); onBusyChange?.(false); }
   }}>
-    {!allowed && <p>Connect Policy administrator using Switch role to {create ? 'add' : 'edit'} vendors.</p>}
+    {!allowed && <p>Connect Admin to {create ? 'add' : 'edit'} vendors.</p>}
     {!create && <p>Version {vendor.version}</p>}
     <fieldset disabled={!allowed || busy}>
       {create && <div><label>Vendor ID<input required value={id} onChange={e => setId(e.target.value)} placeholder="northstar-demo" pattern="[a-z][a-z0-9_-]{0,63}" maxLength={64} autoCapitalize="none" spellCheck={false} aria-describedby="ap-vendor-id-help" aria-invalid={!!id && !validId} /></label>
@@ -195,7 +195,7 @@ export function InvoicesView({ refreshRevision }: { refreshRevision: number }) {
           </div> : <label className="ap-text-label">Invoice text<textarea rows={5} required value={text} maxLength={20000} onChange={event => setText(event.target.value)} disabled={disabled} placeholder="Paste the vendor, invoice number, ETH amount and due date…" /></label>}
           {fileError && <p role="alert" className="ap-input-error">{fileError}</p>}
           <div className="ap-upload-actions"><button type="button" className="ap-text-button" disabled={busy} onClick={() => { setMode(mode === 'file' ? 'text' : 'file'); setFileError(''); }}>{mode === 'file' ? 'Paste text instead' : 'Upload a file instead'}</button><button className="btn btn-primary" type="submit" disabled={disabled || (mode === 'file' ? !file : !text.trim())}>{busy ? 'Processing…' : 'Process invoice'}</button></div>
-          {!proposer ? <p className="ap-help">Proposer required. Connect using Switch role.</p> : !data?.intake_enabled && !loading ? <p className="ap-help">Invoice intake is off in backend settings.</p> : data?.execution_mode === 'simulated' ? <p className="ap-help">Simulation only. No funds will be sent.</p> : data?.execution_mode === 'sepolia' ? <p className="ap-help">{data.automatic_execution_enabled && data.live_execution_enabled ? 'Eligible invoices may submit Sepolia payments within approved limits.' : 'Sepolia connected · automatic payments disabled. Checked invoices have not been submitted.'}</p> : null}
+          {!proposer ? <p className="ap-help">Proposer required. Connect Admin to continue.</p> : !data?.intake_enabled && !loading ? <p className="ap-help">Invoice intake is off in backend settings.</p> : data?.execution_mode === 'simulated' ? <p className="ap-help">Simulation only. No funds will be sent.</p> : data?.execution_mode === 'sepolia' ? <p className="ap-help">{data.automatic_execution_enabled && data.live_execution_enabled ? 'Eligible invoices may submit Sepolia payments within approved limits.' : 'Sepolia connected · automatic payments disabled. Checked invoices have not been submitted.'}</p> : null}
           {data?.horizon_bastion_enabled && <p className="ap-help">Horizon + Bastion {data.horizon_bastion_evaluated ? 'screening on.' : 'screening requires validation.'}</p>}
           {message && <p role="status" className="ap-feedback">{message}</p>}
         </form>

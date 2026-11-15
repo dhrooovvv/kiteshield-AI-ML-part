@@ -46,20 +46,22 @@ export class KiteShieldAPIError extends Error {
   }
 }
 
-export type CredentialRole = 'proposer' | 'approver' | 'policyAdmin' | 'demoAdmin';
+export type CredentialRole = 'proposer' | 'approver' | 'policyAdmin' | 'demoAdmin' | 'admin';
 export const credentialRoleLabels: Record<CredentialRole, string> = {
   proposer: 'Proposer', approver: 'Human approver', policyAdmin: 'Policy administrator',
-  demoAdmin: 'Demo administrator (simulation only)',
+  demoAdmin: 'Demo administrator (simulation only)', admin: 'Admin',
 };
 const backendRoles: Record<CredentialRole, string> = {
   proposer: 'proposer', approver: 'human_approver', policyAdmin: 'policy_administrator',
-  demoAdmin: 'demo_admin',
+  demoAdmin: 'demo_admin', admin: 'administrator',
 };
 const emptyRoles: readonly CredentialRole[] = Object.freeze([]);
 
 class APIClient {
   private apiKey: string;
-  private roleKeys = { approver: '', policyAdmin: '', demoAdmin: '' };
+  private roleKeys = { approver: '', policyAdmin: '', demoAdmin: '', admin: '' };
+  private verifiedRoles: readonly CredentialRole[] = emptyRoles;
+  private connectionRevision = 0;
   private baseUrl: string;
   private connectedRoles: readonly CredentialRole[] = emptyRoles;
   private credentialListeners = new Set<() => void>();
@@ -76,10 +78,13 @@ class APIClient {
   };
   private setVerified(role: CredentialRole, verified: boolean): void {
     const roles = (Object.keys(backendRoles) as CredentialRole[]).filter(
-      (item) => item === role ? verified : this.connectedRoles.includes(item)
+      (item) => item === role ? verified : this.verifiedRoles.includes(item)
     );
-    if (roles.join() === this.connectedRoles.join()) return;
-    this.connectedRoles = Object.freeze(roles);
+    this.verifiedRoles = Object.freeze(roles);
+    const effective = roles.includes('admin')
+      ? ['admin', 'proposer', 'approver', 'policyAdmin'] as CredentialRole[] : roles;
+    if (effective.join() === this.connectedRoles.join()) return;
+    this.connectedRoles = Object.freeze(effective);
     this.credentialListeners.forEach((listener) => listener());
   }
 
@@ -91,7 +96,7 @@ class APIClient {
   }
 
   public getApiKey(): string {
-    return this.apiKey;
+    return this.getRoleKey('proposer');
   }
 
   public setApiKey(key: string): void {
@@ -100,6 +105,7 @@ class APIClient {
   }
 
   public getRoleKey(role: CredentialRole): string {
+    if (this.verifiedRoles.includes('admin')) return this.roleKeys.admin;
     return role === 'proposer' ? this.apiKey : this.roleKeys[role];
   }
 
@@ -115,20 +121,42 @@ class APIClient {
     return this.connectedRoles.includes('demoAdmin') ? this.roleKeys.demoAdmin : this.getRoleKey(role);
   }
 
+  public disconnect(): void {
+    this.connectionRevision++;
+    this.apiKey = '';
+    this.roleKeys = { approver: '', policyAdmin: '', demoAdmin: '', admin: '' };
+    this.verifiedRoles = emptyRoles;
+    this.connectedRoles = emptyRoles;
+    this.credentialListeners.forEach(listener => listener());
+  }
+
+  private async identifyKey(key: string): Promise<CredentialRole> {
+    if (!key) throw new KiteShieldAPIError('Enter your application key.', 401, 'MISSING_API_KEY');
+    const result = await this.request<unknown>('/security/identity', {
+      method: 'GET', headers: { 'X-API-Key': key },
+    });
+    const role = result && typeof result === 'object' && 'role' in result
+      ? (Object.keys(backendRoles) as CredentialRole[]).find(item => backendRoles[item] === result.role)
+      : undefined;
+    if (!role) throw new KiteShieldAPIError('Unexpected authentication response.', 502, 'INVALID_AUTH_RESPONSE');
+    return role;
+  }
+
+  public async connect(key: string): Promise<void> {
+    const revision = ++this.connectionRevision;
+    const candidate = key.trim();
+    const role = await this.identifyKey(candidate);
+    if (revision !== this.connectionRevision) return;
+    this.disconnect();
+    this.setRoleKey(role, candidate);
+    this.setVerified(role, true);
+  }
+
   public async verifyAndSaveRoleKey(role: CredentialRole, key: string): Promise<void> {
     const candidate = key.trim();
-    if (!candidate) {
-      throw new KiteShieldAPIError('Enter the credential value, not its environment-variable name.', 401, 'MISSING_API_KEY');
-    }
-    const result = await this.request<unknown>('/security/identity', {
-      method: 'GET', headers: { 'X-API-Key': candidate },
-    });
-    if (!result || typeof result !== 'object' || !('role' in result) ||
-        !Object.values(backendRoles).includes(result.role as string)) {
-      throw new KiteShieldAPIError('The backend returned an unexpected authentication response.', 502, 'INVALID_AUTH_RESPONSE');
-    }
-    if (result.role !== backendRoles[role]) {
-      throw new KiteShieldAPIError('This credential belongs to a different role. Choose its matching role.', 403, 'CREDENTIAL_ROLE_MISMATCH');
+    const identity = await this.identifyKey(candidate);
+    if (identity !== role) {
+      throw new KiteShieldAPIError('This credential belongs to a different role.', 403, 'CREDENTIAL_ROLE_MISMATCH');
     }
     this.setRoleKey(role, candidate);
     this.setVerified(role, true);
@@ -173,7 +201,10 @@ class APIClient {
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if (response.status === 401 && this.verifiedRoles.includes('admin')
+          && headers['X-API-Key'] === this.roleKeys.admin) {
+        this.disconnect();
+      } else if (response.status === 401) {
         for (const role of this.connectedRoles) {
           if (this.getRoleKey(role) === headers['X-API-Key']) this.setRoleKey(role, '');
         }
